@@ -110,9 +110,9 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
         ) : null}
         {!summary.workflowPresent ? (
           <Text color="gray">
-            CI is not wired (opt-in): run{" "}
-            <Text color="cyan">agentwiki setup-action</Text> to add a GitHub
-            workflow that refreshes facts on every push.
+            CI is not wired: run{" "}
+            <Text color="cyan">agentwiki setup-action</Text> to re-add the
+            GitHub workflow that refreshes facts on every push.
           </Text>
         ) : null}
       </Panel>

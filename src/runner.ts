@@ -19,6 +19,7 @@ import {
   writeAgentPointers,
   writeCursorHooks,
   writeCursorRule,
+  writeWorkflow,
   type IntegrationResult,
 } from "./emitters/integrations.js";
 
@@ -110,6 +111,16 @@ export async function runGenerate(
     await writeCursorHooks(root),
     ...(await writeAgentPointers(root)),
   ];
+
+  // The workflow is created on init; update only refreshes an existing one so
+  // hook-triggered runs never resurrect a workflow the user deleted.
+  const workflowExists = await fs
+    .access(path.join(root, WORKFLOW_PATH))
+    .then(() => true)
+    .catch(() => false);
+  if (mode === "init" || workflowExists) {
+    integrations.push(await writeWorkflow(root));
+  }
   emitPhase({
     id: "wire",
     status: "done",

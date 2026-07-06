@@ -49,6 +49,7 @@ agentwiki doctor       # environment check: git, backends, auth state
 | `.cursor/rules/agentwiki.mdc` | Always-on rule: Cursor's agent reads the wiki first and maintains prose slots as a side effect of normal work |
 | `.cursor/hooks.json` | `stop` hook: refresh fact blocks after each Cursor agent session |
 | `AGENTS.md` / `CLAUDE.md` | AgentWiki pointer section (inserted or refreshed, surrounding content preserved) |
+| `.github/workflows/agentwiki.yml` | CI: keyless fact refresh on push; optional subscription-based enrichment (commented blocks inside). If you delete it, `update` won't re-create it — `agentwiki setup-action` will |
 
 ## Commands
 
@@ -91,7 +92,7 @@ agentwiki detects installed backends automatically, checks auth before every enr
 
 - **In Cursor:** the emitted rule + `stop` hook maintain the wiki as a side effect of normal agent use.
 - **On commit:** add `agentwiki update` to a pre-commit hook (it's sub-second and deterministic).
-- **On push:** `.github/workflows/agentwiki.yml` (see `src/emitters/integrations.ts`) refreshes fact blocks in CI with zero secrets, and optionally runs `agentwiki enrich` with your `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`.
+- **On push:** the workflow written by `init` refreshes fact blocks in CI with zero secrets, and optionally runs `agentwiki enrich` with your `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` (uncomment the block in the file).
 
 ## Design notes
 
