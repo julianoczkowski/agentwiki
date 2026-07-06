@@ -21,7 +21,7 @@ This repository has an agent-maintained wiki in \`${WIKI_DIR}/\`.
 
 - Before exploring the codebase, read \`${WIKI_DIR}/quickstart.md\` and follow its links for context. Prefer the wiki over cold exploration.
 - Wiki pages contain machine-owned fact blocks (\`<!-- agentwiki:facts ... -->\`) and agent-owned prose slots (\`<!-- agentwiki:prose ... -->\`). NEVER edit fact blocks — they are regenerated deterministically by the \`agentwiki\` CLI.
-- After completing a task that changed code, run \`agentwiki queue --json\`. If it lists empty or stale prose slots related to files you touched, fill them: edit only the text between the prose markers, then set \`status="fresh"\` and \`facts-hash\` to the value reported by the queue for that slot.
+- After completing a task, run \`npx -y @julianoczkowski/agentwiki@latest queue --json\`. If it lists ANY empty or stale prose slots, fill them (prioritize slots related to files you touched, but do not leave others empty): edit only the text between the prose markers, then set \`status="fresh"\` and \`facts-hash\` to the value reported by the queue for that slot.
 - Keep prose slots to 1-3 tight paragraphs, grounded in code you actually inspected.
 `;
 

@@ -24,15 +24,16 @@ When your code changes, fact blocks update automatically and any prose whose fac
 
 ## Quick start
 
-Everything works through `npx` — nothing to install:
+One command — nothing to install:
 
 ```sh
 cd your-project
-
-npx @julianoczkowski/agentwiki init      # generate the wiki + wire integrations
-npx @julianoczkowski/agentwiki enrich    # your coding agent writes the prose
-npx @julianoczkowski/agentwiki status    # freshness overview
+npx @julianoczkowski/agentwiki init
 ```
+
+`init` asks two questions (which agent writes your prose, and whether to write it right now) and produces a **complete** wiki. From then on the GitHub Action and the Cursor rule maintain it — most users never need a second command.
+
+For manual control: `enrich` rewrites pending prose, `status` shows freshness.
 
 `init` creates:
 

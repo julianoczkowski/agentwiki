@@ -91,14 +91,32 @@ function BackendPicker({
   );
 }
 
+/** The backend enrich would use right now, honoring a saved preference. */
+function readyBackendFor(summary: GenerateSummary): DetectedBackend | null {
+  const relevant = summary.preferredBackend
+    ? summary.backends.filter(
+        (candidate) => candidate.backend.id === summary.preferredBackend,
+      )
+    : summary.backends;
+
+  return (
+    relevant.find(
+      (candidate) =>
+        candidate.status.installed && candidate.status.auth !== "missing",
+    ) ?? null
+  );
+}
+
 export function GenerateApp({
   mode,
   root,
   askBackend = false,
+  onEnrichChosen,
 }: {
   mode: GenerateMode;
   root: string;
   askBackend?: boolean;
+  onEnrichChosen?: () => void;
 }) {
   const app = useApp();
   const startedRef = useRef(false);
@@ -114,6 +132,7 @@ export function GenerateApp({
     })),
   );
   const [summary, setSummary] = useState<GenerateSummary | null>(null);
+  const [offerProse, setOfferProse] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -140,6 +159,22 @@ export function GenerateApp({
     })
       .then((result) => {
         setSummary(result);
+
+        // Close the loop for users who would never run a second command:
+        // when an agent is ready and prose is pending, offer to write it now.
+        const pending =
+          result.write.slotCounts.empty + result.write.slotCounts.stale;
+        if (
+          mode === "init" &&
+          Boolean(process.stdin.isTTY) &&
+          pending > 0 &&
+          readyBackendFor(result) !== null &&
+          onEnrichChosen
+        ) {
+          setOfferProse(true);
+          return;
+        }
+
         process.exitCode = 0;
         app.exit();
       })
@@ -148,7 +183,7 @@ export function GenerateApp({
         process.exitCode = 1;
         app.exit();
       });
-  }, [app, mode, root, stage]);
+  }, [app, mode, onEnrichChosen, root, stage]);
 
   const running = summary === null && error === null;
 
@@ -199,12 +234,52 @@ export function GenerateApp({
           <Text color="red">{error}</Text>
         </Text>
       ) : null}
-      {summary ? <GenerateSummaryView summary={summary} /> : null}
+      {summary ? (
+        <GenerateSummaryView hideNextStep={offerProse} summary={summary} />
+      ) : null}
+      {summary && offerProse ? (
+        <Section
+          title="Write the Prose Now?"
+          footer="uses your existing subscription — agentwiki itself never calls an LLM"
+        >
+          <Line>
+            {summary.write.slotCounts.empty + summary.write.slotCounts.stale}{" "}
+            sections are waiting for prose. Your{" "}
+            {readyBackendFor(summary)?.backend.label} is ready and can write
+            them right now (takes a few minutes).
+          </Line>
+          <Select
+            options={[
+              {
+                label: "Yes, write the prose now",
+                detail: "recommended — finishes your wiki in one go",
+              },
+              {
+                label: "Skip for now",
+                detail: "run `agentwiki enrich` later, or let Cursor fill it as you work",
+              },
+            ]}
+            onSelect={(index) => {
+              if (index === 0) {
+                onEnrichChosen?.();
+              }
+              process.exitCode = 0;
+              app.exit();
+            }}
+          />
+        </Section>
+      ) : null}
     </Box>
   );
 }
 
-function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
+function GenerateSummaryView({
+  summary,
+  hideNextStep = false,
+}: {
+  summary: GenerateSummary;
+  hideNextStep?: boolean;
+}) {
   const { write, backends } = summary;
   const created = write.pages.filter((page) => page.action === "created").length;
   const updated = write.pages.filter((page) => page.action === "updated").length;
@@ -260,7 +335,7 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
         ) : null}
       </Section>
 
-      {pending > 0 ? (
+      {pending > 0 && !hideNextStep ? (
         <Section
           title="Next Step: Write the Prose"
           footer="agentwiki never calls an LLM itself — your agent, your subscription"

@@ -84,9 +84,25 @@ async function main(): Promise<void> {
         Boolean(process.stdin.isTTY) &&
         !meta?.backend;
 
-      render(
-        <GenerateApp askBackend={askBackend} mode={command.kind} root={root} />,
+      // Last step of an interactive init: offer to write the prose right away
+      // (most users never come back for a second command).
+      let enrichAfter = false;
+      const instance = render(
+        <GenerateApp
+          askBackend={askBackend}
+          mode={command.kind}
+          onEnrichChosen={() => {
+            enrichAfter = true;
+          }}
+          root={root}
+        />,
       );
+      await instance.waitUntilExit();
+
+      if (enrichAfter) {
+        process.stdout.write("\n");
+        await runEnrich(null, false, false);
+      }
       return;
     }
 
