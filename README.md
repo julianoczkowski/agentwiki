@@ -1,52 +1,40 @@
-# agentwiki
+# AgentWiki
 
-A CLI that generates and maintains a wiki for your codebase — **without calling any LLM itself**.
+**A self-maintaining wiki for your codebase — without your wiki tool ever calling an LLM.**
 
-agentwiki is a deterministic facts engine: it scans your repository (files, symbols, imports, manifests, git history) and generates wiki pages whose **fact blocks** are machine-owned, regenerated on every run, and can never hallucinate. The narrative **prose sections** are written by the coding agent you already pay for — Cursor CLI or Claude Code, on your existing subscription. No new API keys, no local models.
+```sh
+npx @julianoczkowski/agentwiki init
+```
+
+That's it. No API keys, no configuration, no new subscription.
 
 ```
   ▄▀█ █▀▀ █▀▀ █▄░█ ▀█▀ █░█░█ █ █▄▀ █
   █▀█ █▄█ ██▄ █░▀█ ░█░ ▀▄▀▄▀ █ █░█ █
 ```
 
-## How it works
+## What is it?
 
-Every generated page interleaves two kinds of regions:
+AgentWiki generates and maintains a documentation wiki (`agentwiki/` in your repo) out of two kinds of content:
 
-```markdown
-<!-- agentwiki:facts id="dependencies" hash="1992f504c371" -->
-- **Imports from:** `src (root)` (4)
-- **Imported by:** `src (root)` (3), `test` (1)
-<!-- /agentwiki:facts -->
+- **Fact blocks** — machine-owned. Generated deterministically from your code: files, exported symbols, import graphs (with a Mermaid diagram), manifests, and git history. Regenerated on every run, they can never hallucinate and never go stale silently.
+- **Prose sections** — narrative explanations ("what is this module for", "what are we working on"). AgentWiki doesn't write these itself and never calls an LLM. Instead it hands them to **the coding agent you already pay for** — Cursor CLI or Claude Code, running on your existing subscription.
 
-<!-- agentwiki:prose slot="purpose" status="fresh" facts-hash="1992f504c371" hint="..." -->
-This module owns the DeepAgents session lifecycle…   ← written by YOUR agent
-<!-- /agentwiki:prose -->
-```
+When your code changes, fact blocks update automatically and any prose whose facts changed is flagged **stale** — never overwritten. Your agent (or CI) rewrites just those sections.
 
-- `agentwiki init`/`update` regenerate fact blocks deterministically and **never touch prose**.
-- A prose slot is **fresh** when its recorded `facts-hash` matches the hash of the page's current facts. When the code changes underneath it, it becomes **stale** — flagged, not overwritten.
-- `agentwiki queue` lists every empty/stale slot; `agentwiki enrich` hands that queue to Cursor CLI (`cursor-agent -p`) or Claude Code (`claude -p`) running headlessly on your machine, on your existing login.
+## Quick start
 
-## Install & first run
+Everything works through `npx` — nothing to install:
 
 ```sh
-npm install -g @julianoczkowski/agentwiki
-# or without installing:
-npx @julianoczkowski/agentwiki init
+cd your-project
 
-cd /path/to/your/repo
-agentwiki init         # generates agentwiki/, wires integrations, checks backends
-agentwiki doctor       # environment check: git, backends, auth state
+npx @julianoczkowski/agentwiki init      # generate the wiki + wire integrations
+npx @julianoczkowski/agentwiki enrich    # your coding agent writes the prose
+npx @julianoczkowski/agentwiki status    # freshness overview
 ```
 
-From source: `npm install && npm run build && npm link`.
-
-Releases are published to npm automatically via [Trusted Publishers (OIDC)](docs/npm-deployment.md) — `npm version patch && git push --follow-tags`.
-
-📺 [youtube.com/@aiforwork_app](https://www.youtube.com/@aiforwork_app)
-
-`init` produces:
+`init` creates:
 
 | Output | Purpose |
 | --- | --- |
@@ -54,56 +42,74 @@ Releases are published to npm automatically via [Trusted Publishers (OIDC)](docs
 | `agentwiki/architecture.md` | Layout, entrypoints, Mermaid module-dependency graph |
 | `agentwiki/activity.md` | Hot files, recent commits, contributors (90-day window) |
 | `agentwiki/modules/*.md` | Per-module pages: files, exports, imports/imported-by, activity |
-| `.cursor/rules/agentwiki.mdc` | Always-on rule: Cursor's agent reads the wiki first and maintains prose slots as a side effect of normal work |
-| `.cursor/hooks.json` | `stop` hook: refresh fact blocks after each Cursor agent session |
-| `AGENTS.md` / `CLAUDE.md` | AgentWiki pointer section (inserted or refreshed, surrounding content preserved) |
-| `.github/workflows/agentwiki.yml` | CI: keyless fact refresh on push; optional subscription-based enrichment (commented blocks inside). If you delete it, `update` won't re-create it — `agentwiki setup-action` will |
+| `.cursor/rules/agentwiki.mdc` | Always-on rule: Cursor's agent reads the wiki first and maintains prose as a side effect of normal work |
+| `.cursor/hooks.json` | `stop` hook: refresh facts after each Cursor agent session |
+| `AGENTS.md` / `CLAUDE.md` | Pointer section for any coding agent (surrounding content preserved) |
+| `.github/workflows/agentwiki.yml` | CI: keyless fact refresh on push, optional prose enrichment |
+
+Prefer a permanent command? `npm install -g @julianoczkowski/agentwiki` gives you a global `agentwiki`.
 
 ## Commands
 
 ```
 agentwiki init                 Generate the wiki and wire agent integrations
-agentwiki update               Refresh fact blocks; flags prose whose facts changed
+agentwiki update               Refresh fact blocks; flag prose whose facts changed
 agentwiki status               Freshness overview per page/slot + backend readiness
 agentwiki queue [--json]       List prose slots that need writing
 agentwiki enrich               Have your coding agent write the queued slots
         --backend cursor|claude    override the saved preference
         --dry-run                  print the prompt, run nothing
 agentwiki backend [cursor|claude]  Show or save preferred backend
-agentwiki pause                Pause: detach Cursor rule/hook, updates become
-                               no-ops — docs kept, reversible with resume
-agentwiki resume               Re-enable a paused setup
-agentwiki remove [--docs] [-y] Remove all integrations (with confirmation).
-                               Docs are KEPT unless --docs is passed; the wiki
-                               stays useful as plain markdown
-agentwiki setup-action         Write .github/workflows/agentwiki.yml
+agentwiki pause / resume       Pause automation (docs kept) and re-enable
+agentwiki remove [--docs] [-y] Remove integrations with confirmation; docs KEPT
+                               unless --docs is passed
+agentwiki setup-action         (Re)write the GitHub Actions workflow
+agentwiki uninstall            Remove the CLI from this computer (projects untouched)
 agentwiki doctor               Check node, git, backend install + auth state
 ```
 
-## Pausing and leaving
+## The agents that write the prose
 
-agentwiki never locks you in:
+AgentWiki detects what you have, checks its login state before every run, and shows exact terminal steps when something is missing or a token expired:
 
-- `agentwiki pause` disables the Cursor rule (renamed to `.mdc.paused`), detaches our entry from `.cursor/hooks.json` (other tools' hooks untouched), and makes `agentwiki update` a no-op so stray hooks or CI can't churn a paused setup. `agentwiki resume` restores everything.
-- `agentwiki remove` (asks for confirmation; `--yes` for scripts) surgically removes the rule, our hook entries, the `## AgentWiki` sections in AGENTS.md/CLAUDE.md, and the workflow — **your docs stay**, readable as plain markdown since the marker comments are invisible when rendered. Add `--docs` to delete the wiki too. `agentwiki init` re-wires at any time, preserving existing prose.
+| | Local auth | CI auth |
+| --- | --- | --- |
+| **Cursor CLI** | `cursor-agent login` (browser sign-in, no API key) | `CURSOR_API_KEY` repo secret — same subscription, dashboard token |
+| **Claude Code** | logged-in `claude` | `CLAUDE_CODE_OAUTH_TOKEN` via `claude setup-token` (personal), or `ANTHROPIC_API_KEY` (team pipelines) |
 
-## Backends
+Without any backend you still get a complete, always-accurate structural wiki — prose sections simply wait in the queue, and Cursor fills them organically from inside the editor via the emitted rule.
 
-| | Local auth | CI auth | Notes |
-| --- | --- | --- | --- |
-| **Cursor CLI** | `cursor-agent login` (checked via `cursor-agent status`) | `CURSOR_API_KEY` repo secret (same subscription, dashboard token) | install: `curl https://cursor.com/install -fsS \| bash` |
-| **Claude Code** | logged-in `claude` (verified at run time) | `CLAUDE_CODE_OAUTH_TOKEN` via `claude setup-token` (personal) or `ANTHROPIC_API_KEY` (team pipelines) | install: `npm install -g @anthropic-ai/claude-code` |
+## How pages stay honest
 
-agentwiki detects installed backends automatically, checks auth before every enrich run, and prints the exact install/login command when something is missing or a token has expired. Without any backend you still get a complete, always-accurate structural wiki — prose sections simply stay listed in the queue (your agent can also fill them organically from inside the editor via the emitted Cursor rule).
+```markdown
+<!-- agentwiki:facts id="dependencies" hash="1992f504c371" -->
+- **Imports from:** `src (root)` (4)      ← regenerated every run, never edited
+<!-- /agentwiki:facts -->
 
-## Keeping it current
+<!-- agentwiki:prose slot="purpose" status="fresh" facts-hash="1992f504c371" -->
+This module owns the agent session lifecycle…   ← written by YOUR agent
+<!-- /agentwiki:prose -->
+```
 
-- **In Cursor:** the emitted rule + `stop` hook maintain the wiki as a side effect of normal agent use.
-- **On commit:** add `agentwiki update` to a pre-commit hook (it's sub-second and deterministic).
-- **On push:** the workflow written by `init` refreshes fact blocks in CI with zero secrets, and optionally runs `agentwiki enrich` with your `CURSOR_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` (uncomment the block in the file).
+A prose slot is **fresh** while its recorded `facts-hash` matches the page's current facts; a code change flips it to **stale** (flagged, preserved). A content snapshot guarantees no-op runs leave metadata untouched — safe for hooks and scheduled CI. Markers are invisible when the markdown renders, so the wiki reads clean everywhere.
 
-## Design notes
+## Leaving is easy
 
-- **No LLM in the loop for facts.** Symbols and imports come from line-anchored extraction (TS/JS, Python, Go, Rust), the module graph from resolved relative imports, history from git. Facts can be regenerated forever at zero cost.
-- **No-op discipline.** A content snapshot (SHA-256 over the wiki tree, metadata excluded) guarantees that runs which change nothing leave `agentwiki/.agentwiki.json` untouched — safe for hooks and scheduled CI.
-- **Prose safety.** The engine merges by slot name: agent/human prose survives every regeneration; only its freshness flag changes.
+`pause` detaches the automation reversibly. `remove` strips every integration surgically (foreign hooks and your other AGENTS.md content survive) and **keeps your docs** unless you pass `--docs`. `uninstall` removes the command itself, in plain language a non-developer can follow. Nothing global is ever stored on your machine.
+
+## Development
+
+```sh
+git clone https://github.com/julianoczkowski/agentwiki
+cd agentwiki
+npm install
+npm run dev -- doctor     # run from source (tsx)
+npm test                  # vitest unit suite
+npm run build             # tsc -> dist/, then npm link for a global command
+```
+
+Releases are automated via [npm Trusted Publishers (OIDC)](docs/npm-deployment.md): `npm version patch && git push --follow-tags` — no tokens anywhere.
+
+---
+
+MIT © Julian Oczkowski · 📺 [youtube.com/@aiforwork_app](https://www.youtube.com/@aiforwork_app)
