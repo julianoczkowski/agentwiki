@@ -265,7 +265,7 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
           title="Next Step: Write the Prose"
           footer="agentwiki never calls an LLM itself — your agent, your subscription"
         >
-          {usable.length > 0 ? (
+          {usable.length > 0 && summary.preferredBackend ? (
             <>
               <Line>
                 {pending} section{pending === 1 ? "" : "s"} need prose. Your{" "}
@@ -275,6 +275,50 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
               <Item glyph={<Text color={ACCENT}>❯</Text>}>
                 <Text bold color={ACCENT}>
                   agentwiki enrich
+                </Text>
+              </Item>
+            </>
+          ) : usable.length > 0 ? (
+            <>
+              <Line>
+                {pending} section{pending === 1 ? "" : "s"} need prose. You
+                haven't picked a preferred agent yet — here's what you have:
+              </Line>
+              {relevant.map(({ backend, status }) => (
+                <Item
+                  glyph={
+                    <StatusGlyph
+                      status={
+                        status.installed && status.auth !== "missing"
+                          ? "done"
+                          : "warn"
+                      }
+                    />
+                  }
+                  key={backend.id}
+                >
+                  <Text bold>{backend.label.padEnd(12)}</Text>
+                  <Text color="gray">
+                    {status.installed
+                      ? status.auth !== "missing"
+                        ? "ready to write prose"
+                        : status.authDetail
+                      : "not installed"}
+                  </Text>
+                </Item>
+              ))}
+              <Item glyph={<Text color={ACCENT}>❯</Text>}>
+                <Text bold color={ACCENT}>
+                  agentwiki backend
+                </Text>
+                <Text color="gray">  — pick your preferred agent first</Text>
+              </Item>
+              <Item glyph={<Text color={ACCENT}>❯</Text>}>
+                <Text bold color={ACCENT}>
+                  agentwiki enrich
+                </Text>
+                <Text color="gray">
+                  {"  "}— or write now with whichever agent is ready
                 </Text>
               </Item>
             </>
@@ -474,16 +518,7 @@ export function HelpApp() {
           ))}
         </Section>
       ))}
-      <Section
-        title="Examples"
-        footer={
-          <Link
-            color="gray"
-            label="youtube.com/@aiforwork_app"
-            url="https://www.youtube.com/@aiforwork_app"
-          />
-        }
-      >
+      <Section title="Examples">
         {HELP_EXAMPLES.map((example) => (
           <Item glyph={<Text color="green">$</Text>} key={example}>
             <Text color={ACCENT}>{example}</Text>

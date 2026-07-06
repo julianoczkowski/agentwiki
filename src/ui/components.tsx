@@ -156,7 +156,16 @@ export function Section({
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const rows = React.Children.toArray(children).filter(Boolean);
+  // Flatten fragments so every visual row gets a │ spacer between it and
+  // the next, no matter how callers group their JSX.
+  const flatten = (nodes: React.ReactNode): React.ReactNode[] =>
+    React.Children.toArray(nodes).flatMap((child) =>
+      React.isValidElement(child) && child.type === React.Fragment
+        ? flatten((child.props as { children?: React.ReactNode }).children)
+        : [child],
+    );
+
+  const rows = flatten(children).filter(Boolean);
 
   return (
     <Box flexDirection="column" marginBottom={1}>
