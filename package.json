@@ -9,7 +9,7 @@
     "node": ">=20"
   },
   "bin": {
-    "agentwiki": "./dist/cli.js"
+    "agentwiki": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -33,7 +33,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/julianoczkowski/agentwiki.git"
+    "url": "git+https://github.com/julianoczkowski/agentwiki.git"
   },
   "bugs": {
     "url": "https://github.com/julianoczkowski/agentwiki/issues"
