@@ -70,7 +70,15 @@ async function main(): Promise<void> {
         await patchMeta(root, { paused: false });
       }
 
-      render(<GenerateApp mode={command.kind} root={root} />);
+      // First step of an interactive init: pick which agent writes the prose.
+      const askBackend =
+        command.kind === "init" &&
+        Boolean(process.stdin.isTTY) &&
+        !meta?.backend;
+
+      render(
+        <GenerateApp askBackend={askBackend} mode={command.kind} root={root} />,
+      );
       return;
     }
 

@@ -88,16 +88,12 @@ export async function pickBackend(
   const usable = (candidate: DetectedBackend): boolean =>
     candidate.status.installed && candidate.status.auth !== "missing";
 
-  if (explicit) {
-    const match = all.find((candidate) => candidate.backend.id === explicit);
+  // An explicit flag or a saved preference is authoritative: if that backend
+  // isn't ready we surface its setup guide rather than silently switching.
+  const chosen = explicit ?? saved;
+  if (chosen) {
+    const match = all.find((candidate) => candidate.backend.id === chosen);
     return { choice: match ?? null, all };
-  }
-
-  if (saved) {
-    const match = all.find((candidate) => candidate.backend.id === saved);
-    if (match && usable(match)) {
-      return { choice: match, all };
-    }
   }
 
   return { choice: all.find(usable) ?? null, all };

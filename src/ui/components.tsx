@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
 import { VERSION } from "../constants.js";
 
 /** Brand palette — matches julianoczkowski/create-trimble-app. */
@@ -179,6 +179,50 @@ export function Line({ children }: { children: React.ReactNode }) {
       <Text color={BRAND}>{"│ "}</Text>
       {children}
     </Text>
+  );
+}
+
+export interface SelectOption {
+  label: string;
+  detail?: string;
+}
+
+/** Arrow-key select in the create-trimble-app style: ● / ○, Enter confirms. */
+export function Select({
+  options,
+  onSelect,
+}: {
+  options: SelectOption[];
+  onSelect: (index: number) => void;
+}) {
+  const [index, setIndex] = useState(0);
+
+  useInput((_input, key) => {
+    if (key.upArrow) {
+      setIndex((current) => (current - 1 + options.length) % options.length);
+    } else if (key.downArrow) {
+      setIndex((current) => (current + 1) % options.length);
+    } else if (key.return) {
+      onSelect(index);
+    }
+  });
+
+  return (
+    <Box flexDirection="column">
+      {options.map((option, optionIndex) => (
+        <Text key={option.label}>
+          <Text color={optionIndex === index ? "green" : "gray"}>
+            {optionIndex === index ? "● " : "○ "}
+          </Text>
+          <Text bold={optionIndex === index}>{option.label}</Text>
+          {option.detail ? <Text color="gray"> ({option.detail})</Text> : null}
+        </Text>
+      ))}
+      <Text>
+        <Text color="gray">↑/↓ to navigate · Enter: </Text>
+        <Text bold>confirm</Text>
+      </Text>
+    </Box>
   );
 }
 

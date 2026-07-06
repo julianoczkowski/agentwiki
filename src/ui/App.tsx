@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, Text, useApp } from "ink";
 import { WIKI_DIR } from "../constants.js";
-import { setupSteps } from "../backends/index.js";
+import {
+  detectBackends,
+  setupSteps,
+  type DetectedBackend,
+} from "../backends/index.js";
+import { saveBackendPreference } from "../engine/wiki.js";
 import {
   gatherStatus,
   runDoctor,
@@ -20,14 +25,84 @@ import {
   Line,
   Logo,
   Section,
+  Select,
   StatusGlyph,
 } from "./components.js";
 
 type GenerateMode = "init" | "update";
 
-export function GenerateApp({ mode, root }: { mode: GenerateMode; root: string }) {
+function backendReadiness(candidate: DetectedBackend): string {
+  if (!candidate.status.installed) {
+    return "not installed — we'll show the install steps after setup";
+  }
+  if (candidate.status.auth === "missing") {
+    return "installed, sign-in needed — we'll show the steps after setup";
+  }
+  return "ready to write prose";
+}
+
+/** First step of init: pick which coding agent writes the prose. */
+function BackendPicker({
+  backends,
+  onDone,
+  root,
+}: {
+  backends: DetectedBackend[];
+  onDone: () => void;
+  root: string;
+}) {
+  const options = [
+    ...backends.map((candidate) => ({
+      label: candidate.backend.label,
+      detail: backendReadiness(candidate),
+    })),
+    {
+      label: "Decide later",
+      detail: "agentwiki will use whichever agent is ready",
+    },
+  ];
+
+  return (
+    <Section
+      title="Choose Your Prose Writer"
+      footer="saved per project — change any time with agentwiki backend <cursor|claude>"
+    >
+      <Line>
+        agentwiki never calls an LLM itself. Which coding agent should write
+      </Line>
+      <Line>
+        the wiki's prose sections, on your existing subscription?
+      </Line>
+      <Select
+        options={options}
+        onSelect={(index) => {
+          const picked = backends[index];
+          if (picked) {
+            void saveBackendPreference(root, picked.backend.id).then(onDone);
+          } else {
+            onDone();
+          }
+        }}
+      />
+    </Section>
+  );
+}
+
+export function GenerateApp({
+  mode,
+  root,
+  askBackend = false,
+}: {
+  mode: GenerateMode;
+  root: string;
+  askBackend?: boolean;
+}) {
   const app = useApp();
   const startedRef = useRef(false);
+  const [stage, setStage] = useState<"pick" | "run">(
+    askBackend ? "pick" : "run",
+  );
+  const [detected, setDetected] = useState<DetectedBackend[] | null>(null);
   const [phases, setPhases] = useState(
     GENERATE_PHASES.map((phase) => ({
       ...phase,
@@ -39,7 +114,14 @@ export function GenerateApp({ mode, root }: { mode: GenerateMode; root: string }
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (startedRef.current) {
+    if (stage !== "pick" || detected !== null) {
+      return;
+    }
+    detectBackends().then(setDetected);
+  }, [stage, detected]);
+
+  useEffect(() => {
+    if (stage !== "run" || startedRef.current) {
       return;
     }
     startedRef.current = true;
@@ -63,9 +145,30 @@ export function GenerateApp({ mode, root }: { mode: GenerateMode; root: string }
         process.exitCode = 1;
         app.exit();
       });
-  }, [app, mode, root]);
+  }, [app, mode, root, stage]);
 
   const running = summary === null && error === null;
+
+  if (stage === "pick") {
+    return (
+      <Box flexDirection="column">
+        <Logo />
+        {detected === null ? (
+          <Section title="Choose Your Prose Writer" footer="checking…">
+            <Line>
+              <Text color="gray">Checking which coding agents you have…</Text>
+            </Line>
+          </Section>
+        ) : (
+          <BackendPicker
+            backends={detected}
+            onDone={() => setStage("run")}
+            root={root}
+          />
+        )}
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column">
@@ -104,10 +207,16 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
   const updated = write.pages.filter((page) => page.action === "updated").length;
   const removed = write.pages.filter((page) => page.action === "removed").length;
   const pending = write.slotCounts.empty + write.slotCounts.stale;
-  const usable = backends.filter(
+  // A chosen backend is authoritative: only talk about that one.
+  const relevant = summary.preferredBackend
+    ? backends.filter(
+        (candidate) => candidate.backend.id === summary.preferredBackend,
+      )
+    : backends;
+  const usable = relevant.filter(
     (candidate) => candidate.status.installed && candidate.status.auth !== "missing",
   );
-  const notReady = backends.filter(
+  const notReady = relevant.filter(
     (candidate) => !candidate.status.installed || candidate.status.auth === "missing",
   );
 
@@ -168,14 +277,23 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
             </>
           ) : (
             <>
-              <Line>
-                {pending} section{pending === 1 ? "" : "s"} need prose, but no
-                coding agent is ready yet. Pick ONE (Cursor if you use the
-              </Line>
-              <Line>
-                Cursor editor, Claude Code if you have a Claude subscription)
-                and follow its steps in this terminal:
-              </Line>
+              {summary.preferredBackend ? (
+                <Line>
+                  {pending} section{pending === 1 ? "" : "s"} need prose. Your
+                  chosen agent isn't ready yet — follow these steps:
+                </Line>
+              ) : (
+                <>
+                  <Line>
+                    {pending} section{pending === 1 ? "" : "s"} need prose, but
+                    no coding agent is ready yet. Pick ONE (Cursor if you use
+                  </Line>
+                  <Line>
+                    the Cursor editor, Claude Code if you have a Claude
+                    subscription) and follow its steps in this terminal:
+                  </Line>
+                </>
+              )}
               {notReady.map(({ backend, status }) => (
                 <Box flexDirection="column" key={backend.id}>
                   <Item

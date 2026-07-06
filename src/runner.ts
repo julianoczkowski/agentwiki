@@ -46,6 +46,7 @@ export interface GenerateSummary {
   modules: number;
   gitHead: string | null;
   workflowPresent: boolean;
+  preferredBackend: "cursor" | "claude" | null;
 }
 
 export const GENERATE_PHASES = [
@@ -155,7 +156,10 @@ export async function runGenerate(
     workflowPresent = false;
   }
 
+  const finalMeta = await readMeta(root);
+
   return {
+    preferredBackend: finalMeta?.backend ?? null,
     mode,
     write,
     integrations,
