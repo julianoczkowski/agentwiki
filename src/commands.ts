@@ -8,7 +8,12 @@ export type Command =
   | { kind: "status" }
   | { kind: "doctor" }
   | { kind: "queue"; json: boolean }
-  | { kind: "enrich"; backend: BackendId | null; dryRun: boolean }
+  | {
+      kind: "enrich";
+      backend: BackendId | null;
+      dryRun: boolean;
+      verbose: boolean;
+    }
   | { kind: "backend"; backend: BackendId | null }
   | { kind: "pause" }
   | { kind: "resume" }
@@ -81,7 +86,12 @@ export function parseArgs(argv: string[]): Command {
         }
         backend = value;
       }
-      return { kind: "enrich", backend, dryRun: rest.includes("--dry-run") };
+      return {
+        kind: "enrich",
+        backend,
+        dryRun: rest.includes("--dry-run"),
+        verbose: rest.includes("--verbose"),
+      };
     }
     default:
       return { kind: "error", message: `Unknown command: ${first}` };
@@ -114,6 +124,10 @@ export const HELP_GROUPS: HelpGroup[] = [
       { command: "enrich", description: "Have your coding agent write the queued slots" },
       { command: "  --backend <cursor|claude>", description: "Override the saved choice for one run" },
       { command: "  --dry-run", description: "Print the prompt, run nothing" },
+      {
+        command: "  --verbose",
+        description: "Stream the agent's raw output while it works",
+      },
       { command: "backend", description: "Pick your prose writer interactively" },
       { command: "backend <cursor|claude>", description: "Save the choice directly" },
     ],

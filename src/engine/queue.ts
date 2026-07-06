@@ -135,5 +135,5 @@ Strict rules:
 5. Write 1-3 tight paragraphs per slot (tables/bullets allowed where clearer). Ground every claim in code you inspected.
 6. Do not create, delete, or rename any files. Do not modify anything outside the ${WIKI_DIR}/ directory.
 
-When done, reply with a one-line summary per slot you wrote.`;
+When done, reply with ONLY the list of wiki file paths you edited, one per line — no descriptions, no summaries.`;
 }

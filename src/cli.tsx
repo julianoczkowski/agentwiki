@@ -222,7 +222,7 @@ async function main(): Promise<void> {
     }
 
     case "enrich":
-      await runEnrich(command.backend, command.dryRun);
+      await runEnrich(command.backend, command.dryRun, command.verbose);
       return;
   }
 }
@@ -477,6 +477,7 @@ async function runUninstall(yes: boolean): Promise<void> {
 async function runEnrich(
   explicit: BackendId | null,
   dryRun: boolean,
+  verbose: boolean,
 ): Promise<void> {
   if (!(await wikiExists(root))) {
     process.stderr.write(
@@ -546,9 +547,16 @@ async function runEnrich(
 
   const progress = createEnrichProgress(backend.label, items.length);
   let sawInsecureDirs = false;
+  let capturedOutput = "";
 
   const result = await backend.enrich(prompt, root, (chunk) => {
-    progress.interrupt(chunk);
+    capturedOutput += chunk;
+
+    // The agent's prose lands in the wiki files; its chatter stays out of
+    // the terminal unless the user asked for it.
+    if (verbose) {
+      progress.interrupt(chunk);
+    }
 
     if (!sawInsecureDirs && /insecure directories/i.test(chunk)) {
       sawInsecureDirs = true;
@@ -559,34 +567,62 @@ async function runEnrich(
   progress.stop();
   process.stdout.write("\n");
 
-  if (result.authFailed) {
+  if (result.authFailed || !result.ok) {
+    if (!verbose && capturedOutput.trim().length > 0) {
+      const tail = capturedOutput.trim().split("\n").slice(-15).join("\n");
+      process.stderr.write(`${tail}\n\n`);
+    }
+
     process.stderr.write(
-      `\n✖ ${backend.label} authentication failed — your login/token has likely expired.\n  Fix it with: ${backend.loginHint}\n  Then re-run: agentwiki enrich\n`,
+      result.authFailed
+        ? `${plain.glyph.fail(`${backend.label} authentication failed — your login/token has likely expired.`)}\n  Fix it with: ${paint.accent(backend.loginHint)}\n  Then re-run: ${paint.accent("agentwiki enrich")}\n`
+        : `${plain.glyph.fail(`${backend.label} exited with code ${result.exitCode ?? "?"} — output above.`)}\n`,
     );
     process.exitCode = 1;
     return;
   }
 
-  if (!result.ok) {
-    process.stderr.write(
-      `\n✖ ${backend.label} exited with code ${result.exitCode ?? "?"} — see output above.\n`,
-    );
-    process.exitCode = 1;
-    return;
-  }
-
+  // Deterministic summary: which files got which slots written, computed
+  // from the queue diff — never from the agent's own claims.
   const remaining = await scanQueue(root);
-  const written = items.length - remaining.length;
+  const remainingKeys = new Set(
+    remaining.map((item) => `${item.file}#${item.slot}`),
+  );
+  const writtenByFile = new Map<string, string[]>();
+  const pendingByFile = new Map<string, string[]>();
 
-  if (remaining.length === 0) {
-    process.stdout.write(
-      `✔ All ${items.length} slot(s) written — wiki is fully fresh.\n`,
-    );
-  } else {
-    process.stdout.write(
-      `✔ ${written} slot(s) written, ${remaining.length} still pending (re-run \`agentwiki enrich\` or see \`agentwiki queue\`).\n`,
-    );
+  for (const item of items) {
+    const target = remainingKeys.has(`${item.file}#${item.slot}`)
+      ? pendingByFile
+      : writtenByFile;
+    target.set(item.file, [...(target.get(item.file) ?? []), item.slot]);
   }
+
+  const written = items.length - remaining.length;
+  const rows = [
+    ...[...writtenByFile.entries()].map(([file, slots]) =>
+      plain.glyph.done(`${paint.bold(file.padEnd(36))} ${slots.join(" · ")}`),
+    ),
+    ...[...pendingByFile.entries()].map(([file, slots]) =>
+      plain.glyph.warn(
+        `${file.padEnd(36)} ${slots.join(" · ")} ${paint.yellow("(still pending)")}`,
+      ),
+    ),
+  ];
+
+  if (rows.length === 0) {
+    rows.push(plain.line("No slots changed."));
+  }
+
+  process.stdout.write(
+    `${plain.thread(
+      "Prose Written",
+      rows,
+      remaining.length === 0
+        ? `all ${items.length} slots written — wiki is fully fresh`
+        : `${written} of ${items.length} slots written — re-run \`agentwiki enrich\` for the rest`,
+    )}\n`,
+  );
 }
 
 main().catch((error: unknown) => {
