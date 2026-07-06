@@ -173,7 +173,7 @@ jobs:
         with:
           node-version: 20
       - name: Refresh wiki fact blocks (deterministic, no keys needed)
-        run: npx agentwiki update
+        run: npx -y @julianoczkowski/agentwiki@latest update
       - name: Commit refreshed facts
         run: |
           if [[ -n "$(git status --porcelain agentwiki/)" ]]; then
@@ -195,7 +195,7 @@ jobs:
       # - name: Write stale prose
       #   env:
       #     CURSOR_API_KEY: \${{ secrets.CURSOR_API_KEY }}
-      #   run: npx agentwiki enrich --backend cursor
+      #   run: npx -y @julianoczkowski/agentwiki@latest enrich --backend cursor
       #
       # Claude Code (run \`claude setup-token\` locally, save as CLAUDE_CODE_OAUTH_TOKEN;
       # note: Anthropic points team-owned pipelines to API keys instead):
@@ -204,7 +204,7 @@ jobs:
       # - name: Write stale prose
       #   env:
       #     CLAUDE_CODE_OAUTH_TOKEN: \${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      #   run: npx agentwiki enrich --backend claude
+      #   run: npx -y @julianoczkowski/agentwiki@latest enrich --backend claude
 `;
 
 export async function writeWorkflow(root: string): Promise<IntegrationResult> {
