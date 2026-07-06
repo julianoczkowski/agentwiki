@@ -13,6 +13,7 @@ export type Command =
   | { kind: "pause" }
   | { kind: "resume" }
   | { kind: "remove"; docs: boolean; yes: boolean }
+  | { kind: "uninstall"; yes: boolean }
   | { kind: "setup-action" }
   | { kind: "help" }
   | { kind: "version" }
@@ -46,6 +47,11 @@ export function parseArgs(argv: string[]): Command {
       return {
         kind: "remove",
         docs: rest.includes("--docs"),
+        yes: rest.includes("--yes") || rest.includes("-y"),
+      };
+    case "uninstall":
+      return {
+        kind: "uninstall",
         yes: rest.includes("--yes") || rest.includes("-y"),
       };
     case "setup-action":
@@ -102,6 +108,8 @@ Commands
   remove [--docs] [-y]  Remove all agentwiki integrations (asks to confirm).
                         Docs in agentwiki/ are KEPT unless --docs is passed
   setup-action          Write the GitHub Actions workflow template
+  uninstall [-y]        Remove the agentwiki command itself from this computer
+                        (asks to confirm; project docs are never touched)
   doctor                Check environment: git, backends, auth, wiki state
   help, version
 

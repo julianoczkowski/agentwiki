@@ -188,6 +188,10 @@ async function main(): Promise<void> {
       await runRemove(command.docs, command.yes);
       return;
 
+    case "uninstall":
+      await runUninstall(command.yes);
+      return;
+
     case "setup-action": {
       const result = await writeWorkflow(root);
       process.stdout.write(
@@ -270,6 +274,79 @@ async function runRemove(docs: boolean, yes: boolean): Promise<void> {
   }
 
   process.stdout.write("\n✔ agentwiki fully removed.\n");
+}
+
+async function runUninstall(yes: boolean): Promise<void> {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const execFileAsync = promisify(execFile);
+  // npm is npm.cmd on Windows; shell resolves it on every platform.
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+
+  let installedGlobally = false;
+  try {
+    await execFileAsync(npm, ["ls", "-g", "agentwiki", "--depth=0"], {
+      timeout: 30_000,
+    });
+    installedGlobally = true;
+  } catch {
+    installedGlobally = false;
+  }
+
+  if (!installedGlobally) {
+    process.stdout.write(
+      "agentwiki is not installed globally on this computer (you may be\nrunning it via npx or directly from a source folder), so there is\nnothing to uninstall. If you run it from a source folder, just delete\nthat folder.\n",
+    );
+    return;
+  }
+
+  process.stdout.write(
+    [
+      "This removes the `agentwiki` command from this computer.",
+      "",
+      "It does NOT touch any of your projects: documentation, Cursor rules,",
+      "and hooks stay exactly as they are. If you also want those gone, run",
+      "`agentwiki remove` inside each project FIRST (you can't run it after",
+      "the command is uninstalled).",
+      "",
+    ].join("\n"),
+  );
+
+  if (!yes) {
+    if (!process.stdin.isTTY) {
+      process.stderr.write(
+        "Refusing to uninstall without confirmation in a non-interactive shell. Re-run with --yes.\n",
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const answer = (await rl.question("Uninstall agentwiki? [y/N] "))
+      .trim()
+      .toLowerCase();
+    rl.close();
+
+    if (answer !== "y" && answer !== "yes") {
+      process.stdout.write("Aborted — nothing was changed.\n");
+      return;
+    }
+  }
+
+  try {
+    await execFileAsync(npm, ["rm", "-g", "agentwiki"], { timeout: 120_000 });
+    process.stdout.write(
+      "✔ agentwiki has been uninstalled from this computer. Goodbye!\n",
+    );
+  } catch (error) {
+    process.stderr.write(
+      `✖ Could not uninstall automatically (${error instanceof Error ? error.message.split("\n")[0] : String(error)}).\n  Your computer may require administrator rights for this — try:\n    sudo npm rm -g agentwiki\n`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 async function runEnrich(
