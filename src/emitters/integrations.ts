@@ -221,6 +221,157 @@ export async function writeWorkflow(root: string): Promise<IntegrationResult> {
   return writeIfChanged(path.join(root, WORKFLOW_PATH), WORKFLOW_CONTENT);
 }
 
+/** Rule file gets this suffix while paused so Cursor stops loading it. */
+const PAUSED_SUFFIX = ".paused";
+
+export interface RemovalResult {
+  path: string;
+  action: "removed" | "detached" | "absent";
+}
+
+export async function pauseCursorRule(root: string): Promise<RemovalResult> {
+  const rulePath = path.join(root, CURSOR_RULE_PATH);
+  try {
+    await fs.rename(rulePath, `${rulePath}${PAUSED_SUFFIX}`);
+    return { path: CURSOR_RULE_PATH, action: "detached" };
+  } catch {
+    return { path: CURSOR_RULE_PATH, action: "absent" };
+  }
+}
+
+export async function resumeCursorRule(root: string): Promise<RemovalResult> {
+  const rulePath = path.join(root, CURSOR_RULE_PATH);
+  try {
+    await fs.rename(`${rulePath}${PAUSED_SUFFIX}`, rulePath);
+    return { path: CURSOR_RULE_PATH, action: "detached" };
+  } catch {
+    // No paused copy — recreate the rule from the template.
+    await writeCursorRule(root);
+    return { path: CURSOR_RULE_PATH, action: "detached" };
+  }
+}
+
+export async function removePausedRuleArtifact(root: string): Promise<void> {
+  await fs.rm(path.join(root, `${CURSOR_RULE_PATH}${PAUSED_SUFFIX}`), {
+    force: true,
+  });
+}
+
+export async function removeCursorRule(root: string): Promise<RemovalResult> {
+  const rulePath = path.join(root, CURSOR_RULE_PATH);
+  await removePausedRuleArtifact(root);
+  try {
+    await fs.rm(rulePath);
+    return { path: CURSOR_RULE_PATH, action: "removed" };
+  } catch {
+    return { path: CURSOR_RULE_PATH, action: "absent" };
+  }
+}
+
+/** Remove our entry from hooks.json, preserving any other hooks. */
+export async function removeCursorHook(root: string): Promise<RemovalResult> {
+  const hooksPath = path.join(root, CURSOR_HOOKS_PATH);
+
+  let existing: { version?: number; hooks?: Record<string, unknown[]> };
+  try {
+    existing = JSON.parse(await fs.readFile(hooksPath, "utf8"));
+  } catch {
+    return { path: CURSOR_HOOKS_PATH, action: "absent" };
+  }
+
+  const hooks = existing.hooks ?? {};
+  const isOurs = (hook: unknown): boolean =>
+    typeof hook === "object" &&
+    hook !== null &&
+    ((hook as { command?: string }).command?.startsWith("agentwiki") ?? false);
+
+  let changed = false;
+  for (const [event, entries] of Object.entries(hooks)) {
+    if (!Array.isArray(entries)) {
+      continue;
+    }
+    const kept = entries.filter((entry) => !isOurs(entry));
+    if (kept.length !== entries.length) {
+      changed = true;
+      if (kept.length === 0) {
+        delete hooks[event];
+      } else {
+        hooks[event] = kept;
+      }
+    }
+  }
+
+  if (!changed) {
+    return { path: CURSOR_HOOKS_PATH, action: "absent" };
+  }
+
+  if (Object.keys(hooks).length === 0) {
+    await fs.rm(hooksPath, { force: true });
+    return { path: CURSOR_HOOKS_PATH, action: "removed" };
+  }
+
+  existing.hooks = hooks;
+  await fs.writeFile(hooksPath, `${JSON.stringify(existing, null, 2)}\n`, "utf8");
+  return { path: CURSOR_HOOKS_PATH, action: "detached" };
+}
+
+/** Strip the AgentWiki section from AGENTS.md / CLAUDE.md; delete files that end up empty. */
+export async function removeAgentPointers(
+  root: string,
+): Promise<RemovalResult[]> {
+  const results: RemovalResult[] = [];
+
+  for (const target of ["AGENTS.md", "CLAUDE.md"]) {
+    const filePath = path.join(root, target);
+    let content: string;
+    try {
+      content = await fs.readFile(filePath, "utf8");
+    } catch {
+      results.push({ path: target, action: "absent" });
+      continue;
+    }
+
+    const headingIndex = content.indexOf(AGENTS_SECTION_HEADING);
+    if (headingIndex === -1) {
+      results.push({ path: target, action: "absent" });
+      continue;
+    }
+
+    const afterHeading = content.slice(
+      headingIndex + AGENTS_SECTION_HEADING.length,
+    );
+    const nextHeading = afterHeading.search(/^## /m);
+    const end =
+      nextHeading === -1
+        ? content.length
+        : headingIndex + AGENTS_SECTION_HEADING.length + nextHeading;
+
+    const stripped = `${content.slice(0, headingIndex).replace(/\n+$/, "\n")}${content.slice(end)}`;
+
+    if (stripped.trim().length === 0) {
+      await fs.rm(filePath);
+      results.push({ path: target, action: "removed" });
+    } else {
+      await fs.writeFile(filePath, stripped, "utf8");
+      results.push({ path: target, action: "detached" });
+    }
+  }
+
+  return results;
+}
+
+export async function removeWorkflow(root: string): Promise<RemovalResult> {
+  const workflowPath = path.join(root, WORKFLOW_PATH);
+  try {
+    await fs.access(workflowPath);
+  } catch {
+    return { path: WORKFLOW_PATH, action: "absent" };
+  }
+
+  await fs.rm(workflowPath);
+  return { path: WORKFLOW_PATH, action: "removed" };
+}
+
 async function writeIfChanged(
   filePath: string,
   content: string,

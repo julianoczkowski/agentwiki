@@ -10,6 +10,10 @@ export type Command =
   | { kind: "queue"; json: boolean }
   | { kind: "enrich"; backend: BackendId | null; dryRun: boolean }
   | { kind: "backend"; backend: BackendId | null }
+  | { kind: "pause" }
+  | { kind: "resume" }
+  | { kind: "remove"; docs: boolean; yes: boolean }
+  | { kind: "setup-action" }
   | { kind: "help" }
   | { kind: "version" }
   | { kind: "error"; message: string };
@@ -34,6 +38,18 @@ export function parseArgs(argv: string[]): Command {
       return { kind: "status" };
     case "doctor":
       return { kind: "doctor" };
+    case "pause":
+      return { kind: "pause" };
+    case "resume":
+      return { kind: "resume" };
+    case "remove":
+      return {
+        kind: "remove",
+        docs: rest.includes("--docs"),
+        yes: rest.includes("--yes") || rest.includes("-y"),
+      };
+    case "setup-action":
+      return { kind: "setup-action" };
     case "queue":
       return { kind: "queue", json: rest.includes("--json") };
     case "backend": {
@@ -80,6 +96,12 @@ Commands
     --backend <id>        cursor | claude (overrides saved preference)
     --dry-run             Print the prompt that would be sent, run nothing
   backend [<id>]        Show or save the preferred backend (cursor | claude)
+  pause                 Pause agentwiki: detach Cursor hook & rule, updates
+                        become no-ops — all docs are kept
+  resume                Re-enable a paused setup
+  remove [--docs] [-y]  Remove all agentwiki integrations (asks to confirm).
+                        Docs in agentwiki/ are KEPT unless --docs is passed
+  setup-action          Write the GitHub Actions workflow template
   doctor                Check environment: git, backends, auth, wiki state
   help, version
 

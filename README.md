@@ -61,8 +61,22 @@ agentwiki enrich               Have your coding agent write the queued slots
         --backend cursor|claude    override the saved preference
         --dry-run                  print the prompt, run nothing
 agentwiki backend [cursor|claude]  Show or save preferred backend
+agentwiki pause                Pause: detach Cursor rule/hook, updates become
+                               no-ops — docs kept, reversible with resume
+agentwiki resume               Re-enable a paused setup
+agentwiki remove [--docs] [-y] Remove all integrations (with confirmation).
+                               Docs are KEPT unless --docs is passed; the wiki
+                               stays useful as plain markdown
+agentwiki setup-action         Write .github/workflows/agentwiki.yml
 agentwiki doctor               Check node, git, backend install + auth state
 ```
+
+## Pausing and leaving
+
+agentwiki never locks you in:
+
+- `agentwiki pause` disables the Cursor rule (renamed to `.mdc.paused`), detaches our entry from `.cursor/hooks.json` (other tools' hooks untouched), and makes `agentwiki update` a no-op so stray hooks or CI can't churn a paused setup. `agentwiki resume` restores everything.
+- `agentwiki remove` (asks for confirmation; `--yes` for scripts) surgically removes the rule, our hook entries, the `## AgentWiki` sections in AGENTS.md/CLAUDE.md, and the workflow — **your docs stay**, readable as plain markdown since the marker comments are invisible when rendered. Add `--docs` to delete the wiki too. `agentwiki init` re-wires at any time, preserving existing prose.
 
 ## Backends
 

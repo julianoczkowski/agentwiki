@@ -216,11 +216,15 @@ export async function runDoctor(root: string): Promise<DoctorCheck[]> {
   const meta = await readMeta(root);
   checks.push({
     label: "Wiki",
-    status: initialized ? "ok" : "warn",
+    status: initialized ? (meta?.paused ? "warn" : "ok") : "warn",
     detail: initialized
-      ? `initialized${meta ? `, last update ${meta.updatedAt} (${meta.command})` : ""}${meta?.backend ? `, preferred backend: ${meta.backend}` : ""}`
+      ? `${meta?.paused ? "PAUSED, " : ""}initialized${meta ? `, last update ${meta.updatedAt} (${meta.command})` : ""}${meta?.backend ? `, preferred backend: ${meta.backend}` : ""}`
       : "not initialized",
-    hint: initialized ? undefined : "run `agentwiki init`",
+    hint: initialized
+      ? meta?.paused
+        ? "run `agentwiki resume` to re-enable automation"
+        : undefined
+      : "run `agentwiki init`",
   });
 
   return checks;

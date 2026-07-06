@@ -2,10 +2,30 @@
 import { render } from "ink";
 import { getBackend, pickBackend } from "./backends/index.js";
 import type { BackendId } from "./backends/types.js";
+import readline from "node:readline/promises";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { HELP_TEXT, parseArgs } from "./commands.js";
-import { VERSION, WIKI_DIR } from "./constants.js";
+import { VERSION, WIKI_DIR, WORKFLOW_PATH } from "./constants.js";
 import { buildEnrichPrompt, scanQueue } from "./engine/queue.js";
-import { readMeta, saveBackendPreference, wikiExists } from "./engine/wiki.js";
+import {
+  patchMeta,
+  readMeta,
+  saveBackendPreference,
+  wikiDir,
+  wikiExists,
+} from "./engine/wiki.js";
+import {
+  pauseCursorRule,
+  removeAgentPointers,
+  removeCursorHook,
+  removeCursorRule,
+  removeWorkflow,
+  removePausedRuleArtifact,
+  resumeCursorRule,
+  writeCursorHooks,
+  writeWorkflow,
+} from "./emitters/integrations.js";
 import { DoctorApp, GenerateApp, StatusApp } from "./ui/App.js";
 
 const command = parseArgs(process.argv.slice(2));
@@ -35,6 +55,21 @@ async function main(): Promise<void> {
         process.exitCode = 1;
         return;
       }
+
+      const meta = await readMeta(root);
+      if (meta?.paused) {
+        if (command.kind === "update") {
+          // No-op so stray hooks/CI can't churn a paused setup.
+          process.stdout.write(
+            "agentwiki is paused — update skipped. Run `agentwiki resume` to re-enable.\n",
+          );
+          return;
+        }
+        // init while paused implies resume.
+        await removePausedRuleArtifact(root);
+        await patchMeta(root, { paused: false });
+      }
+
       render(<GenerateApp mode={command.kind} root={root} />);
       return;
     }
@@ -102,10 +137,139 @@ async function main(): Promise<void> {
       return;
     }
 
+    case "pause": {
+      if (!(await wikiExists(root))) {
+        process.stderr.write(`No wiki found in ${WIKI_DIR}/ — nothing to pause.\n`);
+        process.exitCode = 1;
+        return;
+      }
+      const meta = await readMeta(root);
+      if (meta?.paused) {
+        process.stdout.write("agentwiki is already paused.\n");
+        return;
+      }
+
+      await pauseCursorRule(root);
+      const hook = await removeCursorHook(root);
+      await patchMeta(root, { paused: true });
+
+      process.stdout.write(
+        [
+          "⏸ agentwiki paused. Your docs in " + WIKI_DIR + "/ are untouched.",
+          "  - Cursor rule disabled (renamed to agentwiki.mdc.paused)",
+          hook.action !== "absent"
+            ? "  - Cursor stop-hook detached from .cursor/hooks.json"
+            : "  - No Cursor hook found (already detached)",
+          "  - `agentwiki update` is now a no-op until you run `agentwiki resume`",
+          "",
+        ].join("\n"),
+      );
+      return;
+    }
+
+    case "resume": {
+      const meta = await readMeta(root);
+      if (!meta?.paused) {
+        process.stdout.write("agentwiki is not paused.\n");
+        return;
+      }
+
+      await resumeCursorRule(root);
+      await writeCursorHooks(root);
+      await patchMeta(root, { paused: false });
+
+      process.stdout.write(
+        "▶ agentwiki resumed — Cursor rule and hook are re-attached.\n  Consider running `agentwiki update` to refresh facts now.\n",
+      );
+      return;
+    }
+
+    case "remove":
+      await runRemove(command.docs, command.yes);
+      return;
+
+    case "setup-action": {
+      const result = await writeWorkflow(root);
+      process.stdout.write(
+        result.action === "unchanged"
+          ? `${WORKFLOW_PATH} already up to date.\n`
+          : `${result.action === "created" ? "Created" : "Updated"} ${WORKFLOW_PATH}.\nThe default job refreshes fact blocks with no secrets. To enable prose\nenrichment on your existing subscription, uncomment one block inside the\nfile and add the matching repository secret (CURSOR_API_KEY or\nCLAUDE_CODE_OAUTH_TOKEN).\n`,
+      );
+      return;
+    }
+
     case "enrich":
       await runEnrich(command.backend, command.dryRun);
       return;
   }
+}
+
+async function runRemove(docs: boolean, yes: boolean): Promise<void> {
+  const planned = [
+    ".cursor/rules/agentwiki.mdc (and any .paused copy)",
+    ".cursor/hooks.json — agentwiki entries only (file deleted if nothing else remains)",
+    "AGENTS.md / CLAUDE.md — the '## AgentWiki' section only (file deleted if it becomes empty)",
+    `${WORKFLOW_PATH} (if present)`,
+    docs
+      ? `${WIKI_DIR}/ — ALL generated docs AND agent-written prose (--docs)`
+      : `${WIKI_DIR}/.agentwiki.json metadata only — your docs and prose are KEPT`,
+  ];
+
+  process.stdout.write(
+    `This will remove the agentwiki setup from ${root}:\n\n${planned
+      .map((line) => `  - ${line}`)
+      .join("\n")}\n\n`,
+  );
+
+  if (!yes) {
+    if (!process.stdin.isTTY) {
+      process.stderr.write(
+        "Refusing to remove without confirmation in a non-interactive shell. Re-run with --yes.\n",
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const answer = (await rl.question("Proceed? [y/N] ")).trim().toLowerCase();
+    rl.close();
+
+    if (answer !== "y" && answer !== "yes") {
+      process.stdout.write("Aborted — nothing was changed.\n");
+      return;
+    }
+  }
+
+  const results = [
+    await removeCursorRule(root),
+    await removeCursorHook(root),
+    ...(await removeAgentPointers(root)),
+    await removeWorkflow(root),
+  ];
+
+  for (const result of results) {
+    if (result.action !== "absent") {
+      process.stdout.write(
+        `  ${result.action === "removed" ? "removed " : "detached"} ${result.path}\n`,
+      );
+    }
+  }
+
+  if (docs) {
+    await fs.rm(wikiDir(root), { recursive: true, force: true });
+    process.stdout.write(`  removed  ${WIKI_DIR}/\n`);
+  } else {
+    await fs.rm(path.join(wikiDir(root), ".agentwiki.json"), { force: true });
+    process.stdout.write(
+      `\n✔ Integrations removed. Your documentation is still in ${WIKI_DIR}/ —\n  it is plain markdown and stays useful (the agentwiki HTML comments are\n  invisible when rendered). Run \`agentwiki init\` any time to re-wire.\n`,
+    );
+    return;
+  }
+
+  process.stdout.write("\n✔ agentwiki fully removed.\n");
 }
 
 async function runEnrich(

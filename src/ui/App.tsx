@@ -264,6 +264,11 @@ export function StatusApp({ root }: { root: string }) {
             {report.meta.backend ? ` · backend: ${report.meta.backend}` : ""}
           </Text>
         ) : null}
+        {report.meta?.paused ? (
+          <Text color="yellow">
+            ⏸ paused — updates are no-ops, run `agentwiki resume` to re-enable
+          </Text>
+        ) : null}
       </Panel>
       <Box flexDirection="column" marginBottom={1}>
         {report.pages.map((page) => (

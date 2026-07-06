@@ -12,6 +12,7 @@ export interface WikiMeta {
   gitHead: string | null;
   pages: number;
   backend?: "cursor" | "claude";
+  paused?: boolean;
 }
 
 export interface PageResult {
@@ -52,9 +53,9 @@ export async function readMeta(root: string): Promise<WikiMeta | null> {
   }
 }
 
-export async function saveBackendPreference(
+export async function patchMeta(
   root: string,
-  backend: "cursor" | "claude",
+  patch: Partial<Pick<WikiMeta, "backend" | "paused">>,
 ): Promise<void> {
   const meta = (await readMeta(root)) ?? {
     version: VERSION,
@@ -64,13 +65,24 @@ export async function saveBackendPreference(
     pages: 0,
   };
 
-  meta.backend = backend;
+  Object.assign(meta, patch);
+  if (patch.paused === false) {
+    delete meta.paused;
+  }
+
   await fs.mkdir(wikiDir(root), { recursive: true });
   await fs.writeFile(
     path.join(wikiDir(root), META_FILE),
     `${JSON.stringify(meta, null, 2)}\n`,
     "utf8",
   );
+}
+
+export async function saveBackendPreference(
+  root: string,
+  backend: "cursor" | "claude",
+): Promise<void> {
+  await patchMeta(root, { backend });
 }
 
 /**
