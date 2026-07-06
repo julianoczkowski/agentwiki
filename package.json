@@ -1,8 +1,9 @@
 {
-  "name": "agentwiki",
+  "name": "@julianoczkowski/agentwiki",
   "version": "0.1.0",
-  "description": "Deterministic codebase wiki engine that recruits the coding agent you already have (Cursor CLI, Claude Code) to write the prose.",
+  "description": "Deterministic codebase wiki engine that recruits the coding agent you already have (Cursor CLI, Claude Code) to write the prose. No API keys, no LLM calls of its own.",
   "license": "MIT",
+  "author": "Julian Oczkowski",
   "type": "module",
   "engines": {
     "node": ">=20"
@@ -12,14 +13,42 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
+  "keywords": [
+    "wiki",
+    "documentation",
+    "docs",
+    "cli",
+    "cursor",
+    "claude-code",
+    "agents",
+    "ai",
+    "codebase",
+    "knowledge-base",
+    "deepwiki",
+    "tree-sitter-free",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/julianoczkowski/agentwiki.git"
+  },
+  "bugs": {
+    "url": "https://github.com/julianoczkowski/agentwiki/issues"
+  },
+  "homepage": "https://github.com/julianoczkowski/agentwiki#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "dev": "tsx src/cli.tsx",
     "postbuild": "chmod +x dist/cli.js",
     "prebuild": "npm run clean",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
     "start": "node dist/cli.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

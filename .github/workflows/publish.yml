@@ -1,0 +1,157 @@
+name: Publish to NPM
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write # Required for OIDC Trusted Publishers
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Trusted publishing requires Node >= 22.14 and npm >= 11.5.1
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          scope: "@julianoczkowski"
+
+      - name: Update npm to latest (required for OIDC)
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test CLI functionality
+        run: |
+          echo "Testing CLI version command..."
+          node dist/cli.js version
+          echo "✓ Version command works"
+
+          echo "Testing CLI help command..."
+          node dist/cli.js help
+          echo "✓ Help command works"
+
+          echo "Testing wiki generation end-to-end..."
+          node dist/cli.js init > /dev/null 2>&1 || true
+          test -f agentwiki/quickstart.md
+          echo "✓ init generates a wiki"
+          node dist/cli.js queue --json > /dev/null
+          echo "✓ queue works"
+          git checkout -- . 2>/dev/null || true
+          rm -rf agentwiki .cursor
+
+      - name: Run security audit
+        run: npm audit --audit-level=high
+
+      - name: Verify npm authentication and OIDC
+        run: |
+          echo "=== OIDC Token Debug ==="
+          echo "GITHUB_REPOSITORY: ${{ github.repository }}"
+          echo "GITHUB_REF: ${{ github.ref }}"
+          echo "GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}"
+          echo ""
+          echo "=== Checking npm configuration ==="
+          npm config list
+          echo ""
+          echo "=== Checking package existence ==="
+          npm view @julianoczkowski/agentwiki --registry=https://registry.npmjs.org || echo "Package check completed"
+
+      - name: Publish to NPM
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ""
+
+      - name: Get version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Package version: v$VERSION"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## AgentWiki ${{ steps.get_version.outputs.VERSION }}
+
+            A deterministic codebase wiki engine — no API keys, no LLM calls of its own.
+            Fact blocks are generated from your code and git history; prose is written by
+            the coding agent you already have (Cursor CLI or Claude Code) on your
+            existing subscription.
+
+            ### Installation
+
+            ```bash
+            npm install -g @julianoczkowski/agentwiki
+            ```
+
+            Or run directly:
+
+            ```bash
+            npx @julianoczkowski/agentwiki init
+            ```
+
+            ### Commands
+            | Command | Description |
+            |---------|-------------|
+            | `agentwiki init` | Generate the wiki and wire agent integrations |
+            | `agentwiki update` | Refresh fact blocks; flag stale prose |
+            | `agentwiki status` | Freshness overview per page/slot |
+            | `agentwiki queue [--json]` | List prose slots that need writing |
+            | `agentwiki enrich` | Have your coding agent write the queued slots |
+            | `agentwiki backend <cursor\|claude>` | Save preferred backend |
+            | `agentwiki pause` / `resume` | Pause or re-enable automation |
+            | `agentwiki remove [--docs]` | Remove integrations (docs kept by default) |
+            | `agentwiki uninstall` | Remove the CLI from the computer |
+            | `agentwiki doctor` | Environment, backend and auth checks |
+
+            🔐 Published with npm Trusted Publishers (OIDC) — no tokens.
+
+            📺 https://www.youtube.com/@aiforwork_app
+          draft: false
+          prerelease: false

@@ -31,12 +31,20 @@ This module owns the DeepAgents session lifecycle…   ← written by YOUR agent
 ## Install & first run
 
 ```sh
-npm install            # (or: npm install -g agentwiki once published)
-npm run build
+npm install -g @julianoczkowski/agentwiki
+# or without installing:
+npx @julianoczkowski/agentwiki init
+
 cd /path/to/your/repo
 agentwiki init         # generates agentwiki/, wires integrations, checks backends
 agentwiki doctor       # environment check: git, backends, auth state
 ```
+
+From source: `npm install && npm run build && npm link`.
+
+Releases are published to npm automatically via [Trusted Publishers (OIDC)](docs/npm-deployment.md) — `npm version patch && git push --follow-tags`.
+
+📺 [youtube.com/@aiforwork_app](https://www.youtube.com/@aiforwork_app)
 
 `init` produces:
 

@@ -12,7 +12,16 @@ import {
   type PhaseStatus,
   type StatusReport,
 } from "../runner.js";
-import { Hint, Logo, Panel, StatusGlyph } from "./components.js";
+import {
+  ACCENT,
+  BRAND_DIM,
+  Hint,
+  Item,
+  Line,
+  Logo,
+  Section,
+  StatusGlyph,
+} from "./components.js";
 
 type GenerateMode = "init" | "update";
 
@@ -56,20 +65,34 @@ export function GenerateApp({ mode, root }: { mode: GenerateMode; root: string }
       });
   }, [app, mode, root]);
 
+  const running = summary === null && error === null;
+
   return (
     <Box flexDirection="column">
-      <Logo subtitle={mode === "init" ? "initializing wiki" : "updating wiki"} />
-      <Box flexDirection="column" marginBottom={1}>
+      <Logo />
+      <Section
+        title={mode === "init" ? "Wiki Setup" : "Wiki Update"}
+        footer={
+          running
+            ? "working…"
+            : error
+              ? "failed"
+              : `done — ${WIKI_DIR}/quickstart.md`
+        }
+      >
         {phases.map((phase) => (
-          <Text key={phase.id}>
-            {"  "}
-            <StatusGlyph status={phase.status} />{" "}
+          <Item glyph={<StatusGlyph status={phase.status} />} key={phase.id}>
             <Text bold={phase.status === "running"}>{phase.title}</Text>
             {phase.detail ? <Text color="gray">  {phase.detail}</Text> : null}
-          </Text>
+          </Item>
         ))}
-      </Box>
-      {error ? <Text color="red">✖ {error}</Text> : null}
+      </Section>
+      {error ? (
+        <Text>
+          <Text color="red">✖ </Text>
+          <Text color="red">{error}</Text>
+        </Text>
+      ) : null}
       {summary ? <GenerateSummaryView summary={summary} /> : null}
     </Box>
   );
@@ -84,93 +107,113 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
   const usable = backends.filter(
     (candidate) => candidate.status.installed && candidate.status.auth !== "missing",
   );
-  const uninstalled = backends.filter((candidate) => !candidate.status.installed);
-  const loggedOut = backends.filter(
-    (candidate) => candidate.status.installed && candidate.status.auth === "missing",
+  const notReady = backends.filter(
+    (candidate) => !candidate.status.installed || candidate.status.auth === "missing",
   );
 
   return (
     <Box flexDirection="column">
-      <Panel title={summary.mode === "init" ? "Wiki initialized" : "Wiki updated"}>
-        <Text>
-          {WIKI_DIR}/ — {created} pages created, {updated} updated, {removed}{" "}
-          removed{" "}
+      <Section
+        title={summary.mode === "init" ? "Wiki Initialized" : "Wiki Updated"}
+        footer={
+          write.contentChanged
+            ? `${WIKI_DIR}/ is up to date`
+            : "no content changes — metadata left untouched"
+        }
+      >
+        <Item glyph={<StatusGlyph status="done" />}>
+          {created} pages created, {updated} updated, {removed} removed{" "}
           <Text color="gray">
             ({summary.totalFiles} files scanned, {summary.modules} modules)
           </Text>
-        </Text>
-        <Text>
+        </Item>
+        <Item
+          glyph={
+            <StatusGlyph status={pending > 0 ? "warn" : "done"} />
+          }
+        >
           Prose slots: <Text color="green">{write.slotCounts.fresh} fresh</Text>
-          {" · "}
+          <Text color="gray"> · </Text>
           <Text color="yellow">{write.slotCounts.stale} stale</Text>
-          {" · "}
+          <Text color="gray"> · </Text>
           <Text color="gray">{write.slotCounts.empty} empty</Text>
-        </Text>
-        {!write.contentChanged ? (
-          <Text color="gray">No content changes — metadata left untouched.</Text>
-        ) : null}
+        </Item>
         {!summary.workflowPresent ? (
-          <Text color="gray">
-            CI is not wired: run{" "}
-            <Text color="cyan">agentwiki setup-action</Text> to re-add the
-            GitHub workflow that refreshes facts on every push.
-          </Text>
+          <Item glyph={<StatusGlyph status="pending" />}>
+            <Text color="gray">
+              CI not wired — run <Text color={ACCENT}>agentwiki setup-action</Text>{" "}
+              to re-add the GitHub workflow
+            </Text>
+          </Item>
         ) : null}
-      </Panel>
+      </Section>
 
       {pending > 0 ? (
-        <Panel title="Next step: write the prose">
+        <Section
+          title="Next Step: Write the Prose"
+          footer="agentwiki never calls an LLM itself — your agent, your subscription"
+        >
           {usable.length > 0 ? (
             <>
-              <Text>
+              <Line>
                 {pending} section{pending === 1 ? "" : "s"} need prose. Your{" "}
                 {usable.map((candidate) => candidate.backend.label).join(" or ")}{" "}
-                can write them on your existing subscription:
-              </Text>
-              <Text bold color="cyan">
-                {"  "}agentwiki enrich
-              </Text>
+                can write them now:
+              </Line>
+              <Item glyph={<Text color={ACCENT}>❯</Text>}>
+                <Text bold color={ACCENT}>
+                  agentwiki enrich
+                </Text>
+              </Item>
             </>
           ) : (
             <>
-              <Text>
-                {pending} section{pending === 1 ? "" : "s"} need prose. agentwiki
-                doesn't call any LLM itself — it borrows the coding agent you
-                already have. None is ready yet. Pick ONE (Cursor if you use
-                the Cursor editor, Claude Code if you have a Claude
-                subscription) and follow its steps in this terminal:
-              </Text>
-              {[...uninstalled, ...loggedOut].map(({ backend, status }) => (
-                <Box flexDirection="column" key={backend.id} marginTop={1}>
-                  <Text>
+              <Line>
+                {pending} section{pending === 1 ? "" : "s"} need prose, but no
+                coding agent is ready yet. Pick ONE (Cursor if you use the
+              </Line>
+              <Line>
+                Cursor editor, Claude Code if you have a Claude subscription)
+                and follow its steps in this terminal:
+              </Line>
+              {notReady.map(({ backend, status }) => (
+                <Box flexDirection="column" key={backend.id}>
+                  <Item
+                    glyph={
+                      <StatusGlyph
+                        status={status.installed ? "warn" : "pending"}
+                      />
+                    }
+                  >
                     <Text bold>{backend.label}</Text>{" "}
                     <Text color={status.installed ? "yellow" : "gray"}>
                       {status.installed ? status.authDetail : "not installed"}
                     </Text>
-                  </Text>
+                  </Item>
                   {setupSteps(backend, status).map((step, index) => (
-                    <Text key={`${backend.id}-${index}`}>
-                      {"    "}
-                      <Text color="gray">{index + 1}.</Text>{" "}
+                    <Line key={`${backend.id}-${index}`}>
+                      <Text color="gray">  {index + 1}. </Text>
                       {step.run ? (
                         <>
-                          <Text color="cyan">{step.run}</Text>
+                          <Text color={ACCENT}>{step.run}</Text>
                           <Text color="gray">  — {step.note}</Text>
                         </>
                       ) : (
                         <Text color="gray">{step.note}</Text>
                       )}
-                    </Text>
+                    </Line>
                   ))}
                 </Box>
               ))}
-              <Text color="gray">
-                When the steps are done, run: agentwiki enrich   (or fill
-                slots from inside your editor — see agentwiki queue)
-              </Text>
+              <Line>
+                <Text color="gray">
+                  When the steps are done, run:{" "}
+                  <Text color={ACCENT}>agentwiki enrich</Text>
+                </Text>
+              </Line>
             </>
           )}
-        </Panel>
+        </Section>
       ) : null}
     </Box>
   );
@@ -190,32 +233,45 @@ export function DoctorApp({ root }: { root: string }) {
 
   return (
     <Box flexDirection="column">
-      <Logo subtitle="environment check" />
-      {checks === null ? (
-        <Text color="gray">Checking…</Text>
-      ) : (
-        <Box flexDirection="column" marginBottom={1}>
-          {checks.map((check) => (
+      <Logo />
+      <Section
+        title="Environment Check"
+        footer={
+          checks === null
+            ? "checking…"
+            : checks.some((check) => check.status !== "ok")
+              ? "follow the steps above, then run agentwiki doctor again"
+              : "everything is ready"
+        }
+      >
+        {checks === null ? (
+          <Line>
+            <Text color="gray">Checking development environment…</Text>
+          </Line>
+        ) : (
+          checks.map((check) => (
             <Box flexDirection="column" key={check.label}>
-              <Text>
-                {"  "}
-                <StatusGlyph
-                  status={
-                    check.status === "ok"
-                      ? "done"
-                      : check.status === "warn"
-                        ? "warn"
-                        : "fail"
-                  }
-                />{" "}
+              <Item
+                glyph={
+                  <StatusGlyph
+                    status={
+                      check.status === "ok"
+                        ? "done"
+                        : check.status === "warn"
+                          ? "warn"
+                          : "fail"
+                    }
+                  />
+                }
+              >
                 <Text bold>{check.label.padEnd(16)}</Text>
                 <Text color="gray">{check.detail}</Text>
-              </Text>
+              </Item>
               {check.hints?.map((hint) => <Hint key={hint}>{hint}</Hint>)}
             </Box>
-          ))}
-        </Box>
-      )}
+          ))
+        )}
+      </Section>
     </Box>
   );
 }
@@ -235,7 +291,7 @@ export function StatusApp({ root }: { root: string }) {
   if (report === null) {
     return (
       <Box flexDirection="column">
-        <Logo subtitle="status" />
+        <Logo />
         <Text color="gray">Reading wiki…</Text>
       </Box>
     );
@@ -244,14 +300,16 @@ export function StatusApp({ root }: { root: string }) {
   if (!report.initialized) {
     return (
       <Box flexDirection="column">
-        <Logo subtitle="status" />
-        <Text>
-          <Text color="yellow">▲ </Text>No wiki found. Run{" "}
-          <Text bold color="cyan">
-            agentwiki init
-          </Text>{" "}
-          to create one.
-        </Text>
+        <Logo />
+        <Section title="Wiki Status" footer="nothing here yet">
+          <Item glyph={<StatusGlyph status="warn" />}>
+            No wiki found. Run{" "}
+            <Text bold color={ACCENT}>
+              agentwiki init
+            </Text>{" "}
+            to create one.
+          </Item>
+        </Section>
       </Box>
     );
   }
@@ -262,67 +320,65 @@ export function StatusApp({ root }: { root: string }) {
       counts[slot.status] += 1;
     }
   }
+  const pending = counts.stale + counts.empty;
 
   return (
     <Box flexDirection="column">
-      <Logo subtitle="status" />
-      <Panel title="Wiki">
-        <Text>
+      <Logo />
+      <Section
+        title="Wiki Status"
+        footer={
+          pending > 0
+            ? `${pending} slots need prose — run agentwiki enrich`
+            : "wiki is fully fresh"
+        }
+      >
+        <Item glyph={<StatusGlyph status={pending > 0 ? "warn" : "done"} />}>
           {report.pages.length} pages ·{" "}
           <Text color="green">{counts.fresh} fresh</Text> ·{" "}
           <Text color="yellow">{counts.stale} stale</Text> ·{" "}
           <Text color="gray">{counts.empty} empty</Text>
-        </Text>
+        </Item>
         {report.meta ? (
-          <Text color="gray">
-            last {report.meta.command} {report.meta.updatedAt}
-            {report.meta.gitHead ? ` at ${report.meta.gitHead}` : ""}
-            {report.meta.backend ? ` · backend: ${report.meta.backend}` : ""}
-          </Text>
+          <Line>
+            <Text color={BRAND_DIM}>
+              last {report.meta.command} {report.meta.updatedAt}
+              {report.meta.gitHead ? ` at ${report.meta.gitHead}` : ""}
+              {report.meta.backend ? ` · backend: ${report.meta.backend}` : ""}
+            </Text>
+          </Line>
         ) : null}
         {report.meta?.paused ? (
-          <Text color="yellow">
-            ⏸ paused — updates are no-ops, run `agentwiki resume` to re-enable
-          </Text>
+          <Item glyph={<StatusGlyph status="warn" />}>
+            <Text color="yellow">
+              paused — updates are no-ops, run `agentwiki resume` to re-enable
+            </Text>
+          </Item>
         ) : null}
-      </Panel>
-      <Box flexDirection="column" marginBottom={1}>
-        {report.pages.map((page) => (
-          <Text key={page.file}>
-            {"  "}
-            <Text color="gray">{page.file.padEnd(36)}</Text>
-            {page.slots.map((slot, index) => (
-              <Text key={`${page.file}-${slot.slot}`}>
-                {index > 0 ? <Text color="gray"> · </Text> : null}
-                <Text
-                  color={
-                    slot.status === "fresh"
-                      ? "green"
-                      : slot.status === "stale"
-                        ? "yellow"
-                        : "gray"
-                  }
-                >
-                  {slot.slot}
+        <Box flexDirection="column">
+          {report.pages.map((page) => (
+            <Line key={page.file}>
+              <Text color="gray">{page.file.padEnd(36)}</Text>
+              {page.slots.map((slot, index) => (
+                <Text key={`${page.file}-${slot.slot}`}>
+                  {index > 0 ? <Text color="gray"> · </Text> : null}
+                  <Text
+                    color={
+                      slot.status === "fresh"
+                        ? "green"
+                        : slot.status === "stale"
+                          ? "yellow"
+                          : "gray"
+                    }
+                  >
+                    {slot.slot}
+                  </Text>
                 </Text>
-              </Text>
-            ))}
-          </Text>
-        ))}
-      </Box>
-      {counts.stale + counts.empty > 0 ? (
-        <Text>
-          <Text color="yellow">▲ </Text>
-          {counts.stale + counts.empty} slots need prose — run{" "}
-          <Text bold color="cyan">
-            agentwiki enrich
-          </Text>
-        </Text>
-      ) : (
-        <Text>
-          <Text color="green">✔ </Text>Wiki is fully fresh.
-        </Text>
-      )}
+              ))}
+            </Line>
+          ))}
+        </Box>
+      </Section>
     </Box>
   );
 }
