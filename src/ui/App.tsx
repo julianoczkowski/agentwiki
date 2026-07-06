@@ -6,7 +6,9 @@ import {
   setupSteps,
   type DetectedBackend,
 } from "../backends/index.js";
-import { saveBackendPreference } from "../engine/wiki.js";
+import type { BackendId } from "../backends/types.js";
+import { HELP_EXAMPLES, HELP_GROUPS, HELP_INTRO } from "../commands.js";
+import { readMeta, saveBackendPreference } from "../engine/wiki.js";
 import {
   gatherStatus,
   runDoctor,
@@ -333,6 +335,139 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
           )}
         </Section>
       ) : null}
+    </Box>
+  );
+}
+
+/** `agentwiki backend` with no args: interactive re-pick of the prose writer. */
+export function BackendApp({ root }: { root: string }) {
+  const app = useApp();
+  const [detected, setDetected] = useState<DetectedBackend[] | null>(null);
+  const [current, setCurrent] = useState<BackendId | null>(null);
+  const [chosen, setChosen] = useState<DetectedBackend | null>(null);
+
+  useEffect(() => {
+    Promise.all([detectBackends(), readMeta(root)]).then(([backends, meta]) => {
+      setDetected(backends);
+      setCurrent(meta?.backend ?? null);
+    });
+  }, [root]);
+
+  useEffect(() => {
+    if (chosen === null) {
+      return;
+    }
+    saveBackendPreference(root, chosen.backend.id).then(() => {
+      process.exitCode = 0;
+      app.exit();
+    });
+  }, [app, chosen, root]);
+
+  if (chosen !== null) {
+    const steps = setupSteps(chosen.backend, chosen.status);
+
+    return (
+      <Box flexDirection="column">
+        <Logo />
+        <Section
+          title="Prose Writer"
+          footer={
+            steps.length > 0
+              ? "finish the steps above, then run agentwiki enrich"
+              : "run agentwiki enrich any time"
+          }
+        >
+          <Item glyph={<StatusGlyph status="done" />}>
+            Preferred backend saved:{" "}
+            <Text bold color={ACCENT}>
+              {chosen.backend.label}
+            </Text>
+          </Item>
+          {steps.map((step, index) => (
+            <Line key={index}>
+              <Text color="gray">  {index + 1}. </Text>
+              {step.run ? (
+                <>
+                  <Text color={ACCENT}>{step.run}</Text>
+                  <Text color="gray">  — {step.note}</Text>
+                </>
+              ) : (
+                <Text color="gray">{step.note}</Text>
+              )}
+            </Line>
+          ))}
+        </Section>
+      </Box>
+    );
+  }
+
+  return (
+    <Box flexDirection="column">
+      <Logo />
+      {detected === null ? (
+        <Section title="Choose Your Prose Writer" footer="checking…">
+          <Line>
+            <Text color="gray">Checking which coding agents you have…</Text>
+          </Line>
+        </Section>
+      ) : (
+        <Section
+          title="Choose Your Prose Writer"
+          footer="saved per project — this replaces the current choice"
+        >
+          <Line>
+            Which coding agent should write this project's wiki prose?
+          </Line>
+          <Select
+            options={detected.map((candidate) => ({
+              label:
+                candidate.backend.id === current
+                  ? `${candidate.backend.label} — current`
+                  : candidate.backend.label,
+              detail: backendReadiness(candidate),
+            }))}
+            onSelect={(index) => {
+              setChosen(detected[index]);
+            }}
+          />
+        </Section>
+      )}
+    </Box>
+  );
+}
+
+/** Visual help screen: hero + grouped command reference. */
+export function HelpApp() {
+  return (
+    <Box flexDirection="column">
+      <Logo />
+      <Section title="What It Does" footer="docs: github.com/julianoczkowski/agentwiki">
+        <Line>
+          <Text color="gray">{HELP_INTRO}</Text>
+        </Line>
+      </Section>
+      {HELP_GROUPS.map((group) => (
+        <Section key={group.title} title={group.title}>
+          {group.rows.map((row) => (
+            <Item
+              glyph={<Text color={BRAND_DIM}>❯</Text>}
+              key={row.command}
+            >
+              <Text bold color={ACCENT}>
+                {row.command.padEnd(30)}
+              </Text>
+              <Text color="gray">{row.description}</Text>
+            </Item>
+          ))}
+        </Section>
+      ))}
+      <Section title="Examples" footer="youtube.com/@aiforwork_app">
+        {HELP_EXAMPLES.map((example) => (
+          <Item glyph={<Text color="green">$</Text>} key={example}>
+            <Text color={ACCENT}>{example}</Text>
+          </Item>
+        ))}
+      </Section>
     </Box>
   );
 }

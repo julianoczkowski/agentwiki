@@ -26,7 +26,13 @@ import {
   writeCursorHooks,
   writeWorkflow,
 } from "./emitters/integrations.js";
-import { DoctorApp, GenerateApp, StatusApp } from "./ui/App.js";
+import {
+  BackendApp,
+  DoctorApp,
+  GenerateApp,
+  HelpApp,
+  StatusApp,
+} from "./ui/App.js";
 
 const command = parseArgs(process.argv.slice(2));
 const root = process.cwd();
@@ -34,7 +40,7 @@ const root = process.cwd();
 async function main(): Promise<void> {
   switch (command.kind) {
     case "help":
-      process.stdout.write(HELP_TEXT);
+      render(<HelpApp />);
       return;
 
     case "version":
@@ -92,6 +98,12 @@ async function main(): Promise<void> {
 
     case "backend": {
       if (command.backend === null) {
+        if (process.stdin.isTTY) {
+          // Interactive re-pick, same select as the init first step.
+          render(<BackendApp root={root} />);
+          return;
+        }
+
         const meta = await readMeta(root);
         process.stdout.write(
           meta?.backend

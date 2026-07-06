@@ -59,7 +59,8 @@ agentwiki queue [--json]       List prose slots that need writing
 agentwiki enrich               Have your coding agent write the queued slots
         --backend cursor|claude    override the saved preference
         --dry-run                  print the prompt, run nothing
-agentwiki backend [cursor|claude]  Show or save preferred backend
+agentwiki backend              Pick your prose writer interactively (also the
+                               first step of init); or pass cursor|claude directly
 agentwiki pause / resume       Pause automation (docs kept) and re-enable
 agentwiki remove [--docs] [-y] Remove integrations with confirmation; docs KEPT
                                unless --docs is passed
