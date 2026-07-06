@@ -89,26 +89,23 @@ export async function writeCursorHooks(
 
 /**
  * Insert or refresh the AgentWiki section in AGENTS.md / CLAUDE.md.
- * Mirrors openwiki's behavior: update both if both exist, create AGENTS.md
- * if neither does, and preserve all surrounding content.
+ * AGENTS.md is ALWAYS ensured (Cursor and most agents read it natively —
+ * a repo with only CLAUDE.md would otherwise be invisible to Cursor);
+ * CLAUDE.md is updated when it already exists. Surrounding content is
+ * preserved in both.
  */
 export async function writeAgentPointers(
   root: string,
 ): Promise<IntegrationResult[]> {
   const results: IntegrationResult[] = [];
-  const candidates = ["AGENTS.md", "CLAUDE.md"];
-  const existing: string[] = [];
+  const targets = ["AGENTS.md"];
 
-  for (const candidate of candidates) {
-    try {
-      await fs.access(path.join(root, candidate));
-      existing.push(candidate);
-    } catch {
-      // absent
-    }
+  try {
+    await fs.access(path.join(root, "CLAUDE.md"));
+    targets.push("CLAUDE.md");
+  } catch {
+    // No CLAUDE.md — AGENTS.md alone covers Claude Code too.
   }
-
-  const targets = existing.length > 0 ? existing : ["AGENTS.md"];
 
   for (const target of targets) {
     const filePath = path.join(root, target);
