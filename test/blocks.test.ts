@@ -104,6 +104,56 @@ describe("mergePage", () => {
   });
 });
 
+describe("volatile fact blocks", () => {
+  const withVolatile = (structural: string, volatileBody: string): PageSegment[] => [
+    { kind: "raw", body: "# Title\n\n" },
+    { kind: "facts", id: "structure", body: `\n${structural}\n` },
+    { kind: "facts", id: "git-state", body: `\n${volatileBody}\n`, volatile: true },
+    {
+      kind: "prose",
+      slot: "overview",
+      status: "empty",
+      factsHash: "",
+      hint: "",
+      body: "\n",
+    },
+  ];
+
+  it("volatile changes do not stale prose", () => {
+    const first = mergePage(null, withVolatile("- exports: a, b", "- HEAD abc123"));
+    const written = first.content.replace(PROSE_PLACEHOLDER, "Agent prose.");
+
+    const afterCommit = mergePage(
+      written,
+      withVolatile("- exports: a, b", "- HEAD def456"),
+    );
+    expect(afterCommit.slots).toEqual([{ slot: "overview", status: "fresh" }]);
+    expect(afterCommit.content).toContain("- HEAD def456");
+  });
+
+  it("structural changes still stale prose", () => {
+    const first = mergePage(null, withVolatile("- exports: a, b", "- HEAD abc123"));
+    const written = first.content.replace(PROSE_PLACEHOLDER, "Agent prose.");
+
+    const afterExportChange = mergePage(
+      written,
+      withVolatile("- exports: a, b, NEW", "- HEAD def456"),
+    );
+    expect(afterExportChange.slots).toEqual([{ slot: "overview", status: "stale" }]);
+  });
+
+  it("volatile attribute survives a parse/render round trip", () => {
+    const { content } = mergePage(null, withVolatile("- x", "- HEAD abc"));
+    expect(content).toContain('id="git-state" hash="');
+    expect(content).toContain('volatile="true"');
+    const reparsed = parsePage(content);
+    const block = reparsed.find(
+      (segment) => segment.kind === "facts" && segment.id === "git-state",
+    );
+    expect(block && "volatile" in block && block.volatile).toBe(true);
+  });
+});
+
 describe("effectiveSlotStatus", () => {
   const slot = (body: string, factsHash: string): ProseSlot => ({
     kind: "prose",

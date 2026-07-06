@@ -50,12 +50,12 @@ export interface GenerateSummary {
 }
 
 export const GENERATE_PHASES = [
+  { id: "wire", title: "Wire agent integrations" },
   { id: "scan", title: "Scan repository" },
   { id: "git", title: "Mine git history" },
   { id: "symbols", title: "Extract symbols & imports" },
   { id: "graph", title: "Build module graph" },
   { id: "emit", title: "Generate wiki pages" },
-  { id: "wire", title: "Wire agent integrations" },
   { id: "backends", title: "Check agent backends" },
 ] as const;
 
@@ -64,6 +64,33 @@ export async function runGenerate(
   mode: "init" | "update",
   emitPhase: EmitPhase,
 ): Promise<GenerateSummary> {
+  // Integrations are written BEFORE the scan so the files they create are
+  // counted from the very first run — otherwise the first update after init
+  // sees a different file count and needlessly stales prose.
+  emitPhase({ id: "wire", status: "running" });
+  const integrations: IntegrationResult[] = [
+    await writeCursorRule(root),
+    await writeCursorHooks(root),
+    ...(await writeAgentPointers(root)),
+  ];
+
+  const workflowExists = await fs
+    .access(path.join(root, WORKFLOW_PATH))
+    .then(() => true)
+    .catch(() => false);
+  if (mode === "init" || workflowExists) {
+    integrations.push(await writeWorkflow(root));
+  }
+  emitPhase({
+    id: "wire",
+    status: "done",
+    detail:
+      integrations
+        .filter((integration) => integration.action !== "unchanged")
+        .map((integration) => integration.path.split("/").pop())
+        .join(", ") || "already wired",
+  });
+
   emitPhase({ id: "scan", status: "running" });
   const scan = await scanRepository(root);
   emitPhase({
@@ -108,31 +135,6 @@ export async function runGenerate(
     id: "emit",
     status: "done",
     detail: `${pages.length} pages (${write.pages.filter((page) => page.action === "created").length} new, ${write.pages.filter((page) => page.action === "updated").length} updated)`,
-  });
-
-  emitPhase({ id: "wire", status: "running" });
-  const integrations: IntegrationResult[] = [
-    await writeCursorRule(root),
-    await writeCursorHooks(root),
-    ...(await writeAgentPointers(root)),
-  ];
-
-  // The workflow is created on init; update only refreshes an existing one so
-  // hook-triggered runs never resurrect a workflow the user deleted.
-  const workflowExists = await fs
-    .access(path.join(root, WORKFLOW_PATH))
-    .then(() => true)
-    .catch(() => false);
-  if (mode === "init" || workflowExists) {
-    integrations.push(await writeWorkflow(root));
-  }
-  emitPhase({
-    id: "wire",
-    status: "done",
-    detail: integrations
-      .filter((integration) => integration.action !== "unchanged")
-      .map((integration) => integration.path.split("/").pop())
-      .join(", ") || "already wired",
   });
 
   emitPhase({ id: "backends", status: "running" });

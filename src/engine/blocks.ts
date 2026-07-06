@@ -17,6 +17,12 @@ export interface FactBlock {
   kind: "facts";
   id: string;
   body: string;
+  /**
+   * Volatile facts (git heads, commit lists, hot files) change on every
+   * commit; they are regenerated like any fact block but excluded from the
+   * prose freshness hash so prose only goes stale on structural changes.
+   */
+  volatile?: boolean;
 }
 
 export interface ProseSlot {
@@ -42,10 +48,17 @@ export function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 12);
 }
 
-/** Hash of all fact content on a page; prose slots record this at write time. */
+/**
+ * Hash of the page's STRUCTURAL fact content; prose slots record this at
+ * write time. Volatile blocks are excluded so routine commits don't churn
+ * prose freshness.
+ */
 export function pageFactsHash(segments: PageSegment[]): string {
   const facts = segments
-    .filter((segment): segment is FactBlock => segment.kind === "facts")
+    .filter(
+      (segment): segment is FactBlock =>
+        segment.kind === "facts" && !segment.volatile,
+    )
     .map((segment) => `${segment.id}\n${segment.body.trim()}`)
     .join("\n---\n");
 
@@ -95,7 +108,12 @@ export function parsePage(content: string): PageSegment[] {
     const body = content.slice(bodyStart, bodyStart + closeMatch.index);
 
     if (kind === "facts") {
-      segments.push({ kind: "facts", id: attributes.id ?? "facts", body });
+      segments.push({
+        kind: "facts",
+        id: attributes.id ?? "facts",
+        body,
+        ...(attributes.volatile === "true" ? { volatile: true } : {}),
+      });
     } else {
       const status = attributes.status;
       segments.push({
@@ -133,7 +151,7 @@ export function renderPage(segments: PageSegment[]): string {
 
       if (segment.kind === "facts") {
         return [
-          `<!-- agentwiki:facts id="${segment.id}" hash="${currentHash}" -->`,
+          `<!-- agentwiki:facts id="${segment.id}" hash="${currentHash}"${segment.volatile ? ' volatile="true"' : ""} -->`,
           segment.body.replace(/^\n+|\n+$/g, ""),
           `<!-- /agentwiki:facts -->`,
         ].join("\n");
