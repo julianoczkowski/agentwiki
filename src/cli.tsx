@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { render } from "ink";
-import { getBackend, pickBackend } from "./backends/index.js";
+import { getBackend, pickBackend, setupGuideText } from "./backends/index.js";
 import type { BackendId } from "./backends/types.js";
 import readline from "node:readline/promises";
 import fs from "node:fs/promises";
@@ -98,13 +98,10 @@ async function main(): Promise<void> {
       await saveBackendPreference(root, command.backend);
       process.stdout.write(`Preferred backend saved: ${backend.label}\n`);
 
-      if (!status.installed) {
+      const guide = setupGuideText(backend, status);
+      if (guide.length > 0) {
         process.stdout.write(
-          `note: ${backend.label} is not installed yet.\n  install: ${backend.installHint}\n  login:   ${backend.loginHint}\n`,
-        );
-      } else if (status.auth === "missing") {
-        process.stdout.write(
-          `note: ${backend.label} is installed but ${status.authDetail}.\n  login: ${backend.loginHint}\n`,
+          `note: ${backend.label} is not ready yet (${status.installed ? status.authDetail : "not installed"}).\n${guide.join("\n")}\n`,
         );
       }
       return;
@@ -382,17 +379,12 @@ async function runEnrich(
 
   if (!choice) {
     process.stderr.write(
-      "No usable coding agent found. agentwiki does not call any LLM itself —\nit borrows the agent you already have a subscription for:\n\n",
+      "No usable coding agent found. agentwiki does not call any LLM itself —\nit borrows the agent you already have a subscription for. Pick ONE of\nthese to set up (Cursor if you use the Cursor editor, Claude Code if you\nhave a Claude subscription):\n\n",
     );
     for (const { backend, status } of all) {
-      if (!status.installed) {
-        process.stderr.write(
-          `  ${backend.label}: not installed\n    install: ${backend.installHint}\n    login:   ${backend.loginHint}\n\n`,
-        );
-      } else if (status.auth === "missing") {
-        process.stderr.write(
-          `  ${backend.label}: ${status.authDetail}\n    login: ${backend.loginHint}\n\n`,
-        );
+      const guide = setupGuideText(backend, status);
+      if (guide.length > 0) {
+        process.stderr.write(`${guide.join("\n")}\n\n`);
       }
     }
     process.exitCode = 1;
@@ -401,17 +393,9 @@ async function runEnrich(
 
   const { backend, status } = choice;
 
-  if (!status.installed) {
+  if (!status.installed || status.auth === "missing") {
     process.stderr.write(
-      `${backend.label} is not installed.\n  install: ${backend.installHint}\n  login:   ${backend.loginHint}\n`,
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  if (status.auth === "missing") {
-    process.stderr.write(
-      `${backend.label}: ${status.authDetail}\n  Fix it with: ${backend.loginHint}\n`,
+      `${backend.label} is not ready: ${status.installed ? status.authDetail : "not installed"}.\n${setupGuideText(backend, status).join("\n")}\n`,
     );
     process.exitCode = 1;
     return;

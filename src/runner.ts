@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { detectBackends, type DetectedBackend } from "./backends/index.js";
+import {
+  detectBackends,
+  setupSteps,
+  type DetectedBackend,
+} from "./backends/index.js";
 import { WORKFLOW_PATH } from "./constants.js";
 import { buildPages } from "./engine/emit.js";
 import { collectGitFacts } from "./engine/git.js";
@@ -185,7 +189,8 @@ export interface DoctorCheck {
   label: string;
   status: "ok" | "warn" | "fail";
   detail: string;
-  hint?: string;
+  /** One line per terminal step the user should take, in order. */
+  hints?: string[];
 }
 
 export async function runDoctor(root: string): Promise<DoctorCheck[]> {
@@ -196,7 +201,7 @@ export async function runDoctor(root: string): Promise<DoctorCheck[]> {
     label: "Node.js",
     status: major >= 20 ? "ok" : "fail",
     detail: `v${process.versions.node}`,
-    hint: major >= 20 ? undefined : "agentwiki requires Node 20+",
+    hints: major >= 20 ? undefined : ["agentwiki requires Node 20+"],
   });
 
   const git = await collectGitFacts(root);
@@ -206,25 +211,27 @@ export async function runDoctor(root: string): Promise<DoctorCheck[]> {
     detail: git
       ? `branch ${git.branch} at ${git.head}`
       : "not a git repository",
-    hint: git
+    hints: git
       ? undefined
-      : "run `git init` — activity pages and incremental updates need git history",
+      : ["run `git init` — activity pages and incremental updates need git history"],
   });
 
   for (const { backend, status } of await detectBackends()) {
-    if (!status.installed) {
+    const steps = setupSteps(backend, status);
+    if (steps.length > 0) {
       checks.push({
         label: backend.label,
         status: "warn",
-        detail: "not installed",
-        hint: `install: ${backend.installHint}`,
-      });
-    } else if (status.auth === "missing") {
-      checks.push({
-        label: backend.label,
-        status: "warn",
-        detail: `${status.version ?? "installed"} — ${status.authDetail}`,
-        hint: `log in: ${backend.loginHint}`,
+        detail: status.installed
+          ? `${status.version ?? "installed"} — ${status.authDetail}`
+          : "not installed",
+        hints: [
+          "in your terminal, one step at a time:",
+          ...steps.map(
+            (step, index) =>
+              `${index + 1}. ${step.run ? `type:  ${step.run}   — ${step.note}` : step.note}`,
+          ),
+        ],
       });
     } else {
       checks.push({
@@ -243,11 +250,11 @@ export async function runDoctor(root: string): Promise<DoctorCheck[]> {
     detail: initialized
       ? `${meta?.paused ? "PAUSED, " : ""}initialized${meta ? `, last update ${meta.updatedAt} (${meta.command})` : ""}${meta?.backend ? `, preferred backend: ${meta.backend}` : ""}`
       : "not initialized",
-    hint: initialized
+    hints: initialized
       ? meta?.paused
-        ? "run `agentwiki resume` to re-enable automation"
+        ? ["run `agentwiki resume` to re-enable automation"]
         : undefined
-      : "run `agentwiki init`",
+      : ["run `agentwiki init`"],
   });
 
   return checks;

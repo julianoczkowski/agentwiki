@@ -7,6 +7,23 @@ export const cursorBackend: AgentBackend = {
   binary: "cursor-agent",
   installHint: "curl https://cursor.com/install -fsS | bash",
   loginHint: "cursor-agent login",
+  installSteps: [
+    {
+      run: "curl https://cursor.com/install -fsS | bash",
+      note: "installs the Cursor CLI",
+    },
+    { note: "close and reopen your terminal so the new command is found" },
+  ],
+  loginSteps: [
+    {
+      run: "cursor-agent login",
+      note: "opens your browser — sign in with your Cursor account (no API key needed)",
+    },
+    {
+      run: "cursor-agent status",
+      note: "check that it says you are logged in",
+    },
+  ],
 
   async detect(): Promise<BackendStatus> {
     const version = await tryExec("cursor-agent", ["--version"]);

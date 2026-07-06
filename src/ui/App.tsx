@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Box, Text, useApp } from "ink";
 import { WIKI_DIR } from "../constants.js";
+import { setupSteps } from "../backends/index.js";
 import {
   gatherStatus,
   runDoctor,
@@ -135,29 +136,37 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
               <Text>
                 {pending} section{pending === 1 ? "" : "s"} need prose. agentwiki
                 doesn't call any LLM itself — it borrows the coding agent you
-                already have. None is ready yet:
+                already have. None is ready yet. Pick ONE (Cursor if you use
+                the Cursor editor, Claude Code if you have a Claude
+                subscription) and follow its steps in this terminal:
               </Text>
-              {uninstalled.map(({ backend }) => (
+              {[...uninstalled, ...loggedOut].map(({ backend, status }) => (
                 <Box flexDirection="column" key={backend.id} marginTop={1}>
                   <Text>
                     <Text bold>{backend.label}</Text>{" "}
-                    <Text color="gray">not installed — install with:</Text>
+                    <Text color={status.installed ? "yellow" : "gray"}>
+                      {status.installed ? status.authDetail : "not installed"}
+                    </Text>
                   </Text>
-                  <Text color="cyan">{"    "}{backend.installHint}</Text>
-                </Box>
-              ))}
-              {loggedOut.map(({ backend, status }) => (
-                <Box flexDirection="column" key={backend.id} marginTop={1}>
-                  <Text>
-                    <Text bold>{backend.label}</Text>{" "}
-                    <Text color="yellow">{status.authDetail}</Text>
-                  </Text>
-                  <Text color="cyan">{"    "}{backend.loginHint}</Text>
+                  {setupSteps(backend, status).map((step, index) => (
+                    <Text key={`${backend.id}-${index}`}>
+                      {"    "}
+                      <Text color="gray">{index + 1}.</Text>{" "}
+                      {step.run ? (
+                        <>
+                          <Text color="cyan">{step.run}</Text>
+                          <Text color="gray">  — {step.note}</Text>
+                        </>
+                      ) : (
+                        <Text color="gray">{step.note}</Text>
+                      )}
+                    </Text>
+                  ))}
                 </Box>
               ))}
               <Text color="gray">
-                Then run: agentwiki enrich   (or fill slots from inside your
-                editor — see agentwiki queue)
+                When the steps are done, run: agentwiki enrich   (or fill
+                slots from inside your editor — see agentwiki queue)
               </Text>
             </>
           )}
@@ -202,7 +211,7 @@ export function DoctorApp({ root }: { root: string }) {
                 <Text bold>{check.label.padEnd(16)}</Text>
                 <Text color="gray">{check.detail}</Text>
               </Text>
-              {check.hint ? <Hint>{check.hint}</Hint> : null}
+              {check.hints?.map((hint) => <Hint key={hint}>{hint}</Hint>)}
             </Box>
           ))}
         </Box>

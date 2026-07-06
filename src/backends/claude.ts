@@ -7,6 +7,18 @@ export const claudeBackend: AgentBackend = {
   binary: "claude",
   installHint: "npm install -g @anthropic-ai/claude-code",
   loginHint: "claude  # then use /login inside the session",
+  installSteps: [
+    {
+      run: "npm install -g @anthropic-ai/claude-code",
+      note: "installs Claude Code",
+    },
+  ],
+  loginSteps: [
+    {
+      run: "claude",
+      note: "start it once and follow the sign-in prompt (uses your Claude subscription), then type /exit",
+    },
+  ],
 
   async detect(): Promise<BackendStatus> {
     const version = await tryExec("claude", ["--version"]);

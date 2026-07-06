@@ -1,6 +1,11 @@
 import { claudeBackend } from "./claude.js";
 import { cursorBackend } from "./cursor.js";
-import type { AgentBackend, BackendId, BackendStatus } from "./types.js";
+import type {
+  AgentBackend,
+  BackendId,
+  BackendStatus,
+  SetupStep,
+} from "./types.js";
 
 export const BACKENDS: AgentBackend[] = [cursorBackend, claudeBackend];
 
@@ -19,6 +24,46 @@ export function isBackendId(value: string): value is BackendId {
 export interface DetectedBackend {
   backend: AgentBackend;
   status: BackendStatus;
+}
+
+/** The terminal steps still needed before this backend can write prose. */
+export function setupSteps(
+  backend: AgentBackend,
+  status: BackendStatus,
+): SetupStep[] {
+  if (!status.installed) {
+    return [...backend.installSteps, ...backend.loginSteps];
+  }
+  if (status.auth === "missing") {
+    return backend.loginSteps;
+  }
+  return [];
+}
+
+/** Plain-text numbered walkthrough, e.g. for enrich/backend command output. */
+export function setupGuideText(
+  backend: AgentBackend,
+  status: BackendStatus,
+): string[] {
+  const steps = setupSteps(backend, status);
+  if (steps.length === 0) {
+    return [];
+  }
+
+  const lines = [
+    `To use ${backend.label}, do this in your terminal, one step at a time:`,
+  ];
+  steps.forEach((step, index) => {
+    if (step.run) {
+      lines.push(`  ${index + 1}. type:  ${step.run}`);
+      lines.push(`          (${step.note})`);
+    } else {
+      lines.push(`  ${index + 1}. ${step.note}`);
+    }
+  });
+  lines.push(`  ${steps.length + 1}. type:  agentwiki enrich`);
+
+  return lines;
 }
 
 export async function detectBackends(): Promise<DetectedBackend[]> {
