@@ -75,7 +75,11 @@ export function Logo() {
       <Text color="gray">{FEATURES}</Text>
       <Text> </Text>
       <Text color={BRAND_DIM}>{BYLINE}</Text>
-      <Text color={BRAND_DIM}>{CHANNEL}</Text>
+      <Link
+        color={BRAND_DIM}
+        label={CHANNEL}
+        url="https://www.youtube.com/@aiforwork_app"
+      />
       <Text> </Text>
     </Box>
   );
@@ -119,6 +123,26 @@ export function StatusGlyph({
   return <Text color="gray">◇</Text>;
 }
 
+/** OSC-8 terminal hyperlink — clickable in iTerm2, Ghostty, VS Code, etc. */
+export function Link({
+  url,
+  label,
+  color = ACCENT,
+}: {
+  url: string;
+  label?: string;
+  color?: string;
+}) {
+  const osc = "\u001b]8;;";
+  const bel = "\u0007";
+
+  return (
+    <Text color={color} underline>
+      {`${osc}${url}${bel}${label ?? url}${osc}${bel}`}
+    </Text>
+  );
+}
+
 /**
  * Clack-style thread: `┌ Title`, gutter `│` lines between rows, `└` close.
  * Rows are Item (glyph row) / Line (plain gutter row) children.
@@ -129,7 +153,7 @@ export function Section({
   children,
 }: {
   title: string;
-  footer?: string;
+  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const rows = React.Children.toArray(children).filter(Boolean);
@@ -157,6 +181,27 @@ export function Section({
   );
 }
 
+/**
+ * Two-column row: fixed gutter/glyph column + wrapping content column, so
+ * wrapped text stays aligned inside the thread instead of spilling to col 0.
+ */
+function GutterRow({
+  gutter,
+  children,
+}: {
+  gutter: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box>
+      <Box flexShrink={0}>{gutter}</Box>
+      <Box flexGrow={1}>
+        <Text wrap="wrap">{children}</Text>
+      </Box>
+    </Box>
+  );
+}
+
 /** A row with a status/custom glyph, like `◆ Git v2.53.0`. */
 export function Item({
   glyph,
@@ -166,19 +211,14 @@ export function Item({
   children: React.ReactNode;
 }) {
   return (
-    <Text>
-      {glyph} {children}
-    </Text>
+    <GutterRow gutter={<Text>{glyph} </Text>}>{children}</GutterRow>
   );
 }
 
 /** A plain informational row inside a Section thread. */
 export function Line({ children }: { children: React.ReactNode }) {
   return (
-    <Text>
-      <Text color={BRAND}>{"│ "}</Text>
-      {children}
-    </Text>
+    <GutterRow gutter={<Text color={BRAND}>{"│ "}</Text>}>{children}</GutterRow>
   );
 }
 
@@ -229,10 +269,15 @@ export function Select({
 /** Indented follow-up under an Item (setup steps, fix hints). */
 export function Hint({ children }: { children: React.ReactNode }) {
   return (
-    <Text>
-      <Text color={BRAND}>{"│ "}</Text>
-      <Text color="gray">{"  ↳ "}</Text>
+    <GutterRow
+      gutter={
+        <Text>
+          <Text color={BRAND}>{"│ "}</Text>
+          <Text color="gray">{"  ↳ "}</Text>
+        </Text>
+      }
+    >
       <Text color="yellow">{children}</Text>
-    </Text>
+    </GutterRow>
   );
 }

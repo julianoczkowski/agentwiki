@@ -33,6 +33,8 @@ import {
   HelpApp,
   StatusApp,
 } from "./ui/App.js";
+import * as plain from "./ui/plain.js";
+import { paint } from "./ui/plain.js";
 
 const command = parseArgs(process.argv.slice(2));
 const root = process.cwd();
@@ -225,21 +227,41 @@ async function main(): Promise<void> {
   }
 }
 
+async function confirm(prompt: string): Promise<boolean> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const answer = (await rl.question(prompt)).trim().toLowerCase();
+  rl.close();
+
+  return answer === "y" || answer === "yes";
+}
+
 async function runRemove(docs: boolean, yes: boolean): Promise<void> {
-  const planned = [
-    ".cursor/rules/agentwiki.mdc (and any .paused copy)",
-    ".cursor/hooks.json — agentwiki entries only (file deleted if nothing else remains)",
-    "AGENTS.md / CLAUDE.md — the '## AgentWiki' section only (file deleted if it becomes empty)",
-    `${WORKFLOW_PATH} (if present)`,
+  const rows = [
+    plain.line(`This removes the agentwiki setup from ${paint.bold(root)}:`),
+    plain.glyph.pending(".cursor/rules/agentwiki.mdc (and any .paused copy)"),
+    plain.glyph.pending(
+      `.cursor/hooks.json — agentwiki entries only ${paint.gray("(other tools' hooks survive)")}`,
+    ),
+    plain.glyph.pending(
+      `AGENTS.md / CLAUDE.md — the AgentWiki section only ${paint.gray("(your other content survives)")}`,
+    ),
+    plain.glyph.pending(`${WORKFLOW_PATH} ${paint.gray("(if present)")}`),
     docs
-      ? `${WIKI_DIR}/ — ALL generated docs AND agent-written prose (--docs)`
-      : `${WIKI_DIR}/.agentwiki.json metadata only — your docs and prose are KEPT`,
+      ? plain.glyph.warn(
+          paint.yellow(
+            `${WIKI_DIR}/ — ALL generated docs AND agent-written prose (--docs)`,
+          ),
+        )
+      : plain.glyph.done(
+          `${paint.green(`${WIKI_DIR}/ docs and prose are KEPT`)} ${paint.gray("— only the metadata file goes")}`,
+        ),
   ];
 
   process.stdout.write(
-    `This will remove the agentwiki setup from ${root}:\n\n${planned
-      .map((line) => `  - ${line}`)
-      .join("\n")}\n\n`,
+    `${plain.thread("Remove AgentWiki From This Project", rows, "nothing is changed until you confirm")}\n\n`,
   );
 
   if (!yes) {
@@ -251,15 +273,10 @@ async function runRemove(docs: boolean, yes: boolean): Promise<void> {
       return;
     }
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    const answer = (await rl.question("Proceed? [y/N] ")).trim().toLowerCase();
-    rl.close();
-
-    if (answer !== "y" && answer !== "yes") {
-      process.stdout.write("Aborted — nothing was changed.\n");
+    if (!(await confirm(`${paint.accent("Proceed?")} [y/N] `))) {
+      process.stdout.write(
+        `${plain.glyph.done("Aborted — nothing was changed.")}\n`,
+      );
       return;
     }
   }
@@ -271,26 +288,32 @@ async function runRemove(docs: boolean, yes: boolean): Promise<void> {
     await removeWorkflow(root),
   ];
 
-  for (const result of results) {
-    if (result.action !== "absent") {
-      process.stdout.write(
-        `  ${result.action === "removed" ? "removed " : "detached"} ${result.path}\n`,
-      );
-    }
-  }
+  const doneRows = results
+    .filter((result) => result.action !== "absent")
+    .map((result) =>
+      plain.glyph.done(
+        `${paint.gray(result.action === "removed" ? "removed " : "detached")} ${result.path}`,
+      ),
+    );
 
   if (docs) {
     await fs.rm(wikiDir(root), { recursive: true, force: true });
-    process.stdout.write(`  removed  ${WIKI_DIR}/\n`);
-  } else {
-    await fs.rm(path.join(wikiDir(root), ".agentwiki.json"), { force: true });
+    doneRows.push(plain.glyph.done(`${paint.gray("removed ")} ${WIKI_DIR}/`));
     process.stdout.write(
-      `\n✔ Integrations removed. Your documentation is still in ${WIKI_DIR}/ —\n  it is plain markdown and stays useful (the agentwiki HTML comments are\n  invisible when rendered). Run \`agentwiki init\` any time to re-wire.\n`,
+      `\n${plain.thread("AgentWiki Fully Removed", doneRows, "thanks for trying it — npx @julianoczkowski/agentwiki init brings it back")}\n`,
     );
     return;
   }
 
-  process.stdout.write("\n✔ agentwiki fully removed.\n");
+  await fs.rm(path.join(wikiDir(root), ".agentwiki.json"), { force: true });
+  doneRows.push(
+    plain.glyph.done(
+      `Your documentation is still in ${paint.bold(`${WIKI_DIR}/`)} — plain markdown, readable anywhere`,
+    ),
+  );
+  process.stdout.write(
+    `\n${plain.thread("Integrations Removed", doneRows, "run `agentwiki init` any time to re-wire")}\n`,
+  );
 }
 
 async function runUninstall(yes: boolean): Promise<void> {
@@ -312,21 +335,35 @@ async function runUninstall(yes: boolean): Promise<void> {
 
   if (!installedGlobally) {
     process.stdout.write(
-      "agentwiki is not installed globally on this computer (you may be\nrunning it via npx or directly from a source folder), so there is\nnothing to uninstall. If you run it from a source folder, just delete\nthat folder.\n",
+      `${plain.thread(
+        "Nothing To Uninstall",
+        [
+          plain.line(
+            "agentwiki is not installed globally on this computer — you may be running it via npx or from a source folder.",
+          ),
+          plain.line(
+            paint.gray("If you run it from a source folder, just delete that folder."),
+          ),
+        ],
+      )}\n`,
     );
     return;
   }
 
   process.stdout.write(
-    [
-      "This removes the `agentwiki` command from this computer.",
-      "",
-      "It does NOT touch any of your projects: documentation, Cursor rules,",
-      "and hooks stay exactly as they are. If you also want those gone, run",
-      "`agentwiki remove` inside each project FIRST (you can't run it after",
-      "the command is uninstalled).",
-      "",
-    ].join("\n"),
+    `${plain.thread(
+      "Uninstall AgentWiki From This Computer",
+      [
+        plain.line("This removes the `agentwiki` command itself."),
+        plain.glyph.done(
+          `${paint.green("Your projects are NOT touched")} — docs, Cursor rules and hooks all stay as they are.`,
+        ),
+        plain.glyph.warn(
+          `Want those gone too? Run ${paint.accent("agentwiki remove")} inside each project ${paint.bold("first")} — you can't run it after the command is uninstalled.`,
+        ),
+      ],
+      "nothing is changed until you confirm",
+    )}\n\n`,
   );
 
   if (!yes) {
@@ -338,17 +375,10 @@ async function runUninstall(yes: boolean): Promise<void> {
       return;
     }
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-    const answer = (await rl.question("Uninstall agentwiki? [y/N] "))
-      .trim()
-      .toLowerCase();
-    rl.close();
-
-    if (answer !== "y" && answer !== "yes") {
-      process.stdout.write("Aborted — nothing was changed.\n");
+    if (!(await confirm(`${paint.accent("Uninstall agentwiki?")} [y/N] `))) {
+      process.stdout.write(
+        `${plain.glyph.done("Aborted — nothing was changed.")}\n`,
+      );
       return;
     }
   }
@@ -356,11 +386,11 @@ async function runUninstall(yes: boolean): Promise<void> {
   try {
     await execFileAsync(npm, ["rm", "-g", "agentwiki"], { timeout: 120_000 });
     process.stdout.write(
-      "✔ agentwiki has been uninstalled from this computer. Goodbye!\n",
+      `${plain.glyph.done("agentwiki has been uninstalled from this computer. Goodbye!")}\n${plain.line(paint.gray(plain.link("https://www.youtube.com/@aiforwork_app", "youtube.com/@aiforwork_app")))}\n`,
     );
   } catch (error) {
     process.stderr.write(
-      `✖ Could not uninstall automatically (${error instanceof Error ? error.message.split("\n")[0] : String(error)}).\n  Your computer may require administrator rights for this — try:\n    sudo npm rm -g agentwiki\n`,
+      `${plain.glyph.fail(`Could not uninstall automatically (${error instanceof Error ? error.message.split("\n")[0] : String(error)}).`)}\n  Your computer may require administrator rights for this — try:\n    ${paint.accent("sudo npm rm -g agentwiki")}\n`,
     );
     process.exitCode = 1;
   }

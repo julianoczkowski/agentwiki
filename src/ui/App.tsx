@@ -25,6 +25,7 @@ import {
   Hint,
   Item,
   Line,
+  Link,
   Logo,
   Section,
   Select,
@@ -441,7 +442,19 @@ export function HelpApp() {
   return (
     <Box flexDirection="column">
       <Logo />
-      <Section title="What It Does" footer="docs: github.com/julianoczkowski/agentwiki">
+      <Section
+        title="What It Does"
+        footer={
+          <Text color="gray">
+            docs:{" "}
+            <Link
+              color="gray"
+              label="github.com/julianoczkowski/agentwiki"
+              url="https://github.com/julianoczkowski/agentwiki"
+            />
+          </Text>
+        }
+      >
         <Line>
           <Text color="gray">{HELP_INTRO}</Text>
         </Line>
@@ -461,7 +474,16 @@ export function HelpApp() {
           ))}
         </Section>
       ))}
-      <Section title="Examples" footer="youtube.com/@aiforwork_app">
+      <Section
+        title="Examples"
+        footer={
+          <Link
+            color="gray"
+            label="youtube.com/@aiforwork_app"
+            url="https://www.youtube.com/@aiforwork_app"
+          />
+        }
+      >
         {HELP_EXAMPLES.map((example) => (
           <Item glyph={<Text color="green">$</Text>} key={example}>
             <Text color={ACCENT}>{example}</Text>
