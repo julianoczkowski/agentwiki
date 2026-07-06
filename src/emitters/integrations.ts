@@ -43,11 +43,25 @@ export async function writeCursorRule(root: string): Promise<IntegrationResult> 
   return writeIfChanged(path.join(root, CURSOR_RULE_PATH), CURSOR_RULE_CONTENT);
 }
 
+/** npx form so the hook works even when the user only ever uses npx. */
+const HOOK_COMMAND = "npx -y @julianoczkowski/agentwiki@latest update";
+
+function isOurHook(hook: unknown): hook is { command: string } {
+  if (typeof hook !== "object" || hook === null) {
+    return false;
+  }
+  const command = (hook as { command?: string }).command ?? "";
+  return (
+    command.startsWith("agentwiki") ||
+    command.includes("@julianoczkowski/agentwiki")
+  );
+}
+
 export async function writeCursorHooks(
   root: string,
 ): Promise<IntegrationResult> {
   const hooksPath = path.join(root, CURSOR_HOOKS_PATH);
-  const ourHook = { command: "agentwiki update" };
+  const ourHook = { command: HOOK_COMMAND };
 
   let existing: { version?: number; hooks?: Record<string, unknown[]> } | null =
     null;
@@ -68,18 +82,17 @@ export async function writeCursorHooks(
 
   const hooks = existing.hooks ?? {};
   const stopHooks = Array.isArray(hooks.stop) ? hooks.stop : [];
-  const alreadyWired = stopHooks.some(
-    (hook) =>
-      typeof hook === "object" &&
-      hook !== null &&
-      (hook as { command?: string }).command?.startsWith("agentwiki"),
-  );
+  const ours = stopHooks.filter(isOurHook);
 
-  if (alreadyWired) {
+  if (
+    ours.length === 1 &&
+    (ours[0] as { command: string }).command === HOOK_COMMAND
+  ) {
     return { path: CURSOR_HOOKS_PATH, action: "unchanged" };
   }
 
-  hooks.stop = [...stopHooks, ourHook];
+  // Migrate any legacy `agentwiki update` entries to the npx form.
+  hooks.stop = [...stopHooks.filter((hook) => !isOurHook(hook)), ourHook];
   existing.hooks = hooks;
   existing.version = existing.version ?? 1;
 
@@ -160,10 +173,9 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  refresh-facts:
+  refresh:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -171,40 +183,55 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
       - name: Refresh wiki fact blocks (deterministic, no keys needed)
         run: npx -y @julianoczkowski/agentwiki@latest update
-      - name: Commit refreshed facts
+
+      # ── Prose enrichment turns on AUTOMATICALLY when a repo secret exists ──
+      # Add ONE of these under Settings -> Secrets and variables -> Actions:
+      #   CURSOR_API_KEY            from cursor.com/dashboard -> API Keys
+      #   CLAUDE_CODE_OAUTH_TOKEN   from running \`claude setup-token\` locally
+      #                             (personal repos; teams should use API keys)
+      # No editing of this file is needed — the steps below skip themselves
+      # when the secret is absent.
+      - name: Write prose with Cursor (auto-skips without CURSOR_API_KEY)
+        env:
+          CURSOR_API_KEY: \${{ secrets.CURSOR_API_KEY }}
+        run: |
+          if [ -z "$CURSOR_API_KEY" ]; then
+            echo "No CURSOR_API_KEY secret - skipping prose enrichment via Cursor."
+            exit 0
+          fi
+          curl https://cursor.com/install -fsS | bash
+          export PATH="$HOME/.cursor/bin:$PATH"
+          npx -y @julianoczkowski/agentwiki@latest enrich --backend cursor
+
+      - name: Write prose with Claude Code (auto-skips without CLAUDE_CODE_OAUTH_TOKEN)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: \${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          CURSOR_API_KEY: \${{ secrets.CURSOR_API_KEY }}
+        run: |
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "No CLAUDE_CODE_OAUTH_TOKEN secret - skipping prose enrichment via Claude Code."
+            exit 0
+          fi
+          if [ -n "$CURSOR_API_KEY" ]; then
+            echo "Cursor already handled enrichment - skipping."
+            exit 0
+          fi
+          npm install -g @anthropic-ai/claude-code
+          npx -y @julianoczkowski/agentwiki@latest enrich --backend claude
+
+      - name: Commit wiki changes
         run: |
           if [[ -n "$(git status --porcelain agentwiki/)" ]]; then
             git config user.name "agentwiki-bot"
             git config user.email "agentwiki-bot@users.noreply.github.com"
             git add agentwiki/
-            git commit -m "docs: refresh agentwiki fact blocks"
+            git commit -m "docs: refresh agentwiki wiki"
             git push
           fi
-
-      # OPTIONAL prose enrichment using your existing agent subscription.
-      # Uncomment ONE of the blocks below and add the secret to enable it.
-      #
-      # Cursor (add CURSOR_API_KEY from cursor.com/dashboard -> API Keys):
-      # - name: Install Cursor CLI
-      #   run: |
-      #     curl https://cursor.com/install -fsS | bash
-      #     echo "$HOME/.cursor/bin" >> $GITHUB_PATH
-      # - name: Write stale prose
-      #   env:
-      #     CURSOR_API_KEY: \${{ secrets.CURSOR_API_KEY }}
-      #   run: npx -y @julianoczkowski/agentwiki@latest enrich --backend cursor
-      #
-      # Claude Code (run \`claude setup-token\` locally, save as CLAUDE_CODE_OAUTH_TOKEN;
-      # note: Anthropic points team-owned pipelines to API keys instead):
-      # - name: Install Claude Code
-      #   run: npm install -g @anthropic-ai/claude-code
-      # - name: Write stale prose
-      #   env:
-      #     CLAUDE_CODE_OAUTH_TOKEN: \${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      #   run: npx -y @julianoczkowski/agentwiki@latest enrich --backend claude
 `;
 
 export async function writeWorkflow(root: string): Promise<IntegrationResult> {

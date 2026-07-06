@@ -94,6 +94,14 @@ This module owns the agent session lifecycle…   ← written by YOUR agent
 
 A prose slot is **fresh** while its recorded `facts-hash` matches the page's current facts; a code change flips it to **stale** (flagged, preserved). A content snapshot guarantees no-op runs leave metadata untouched — safe for hooks and scheduled CI. Markers are invisible when the markdown renders, so the wiki reads clean everywhere.
 
+## Full automation
+
+Everything except the very first `init` can run hands-free:
+
+- **Facts**: refreshed automatically on every push (GitHub Action, zero secrets) and after every Cursor agent session (`stop` hook, runs via npx — no global install needed).
+- **Prose**: add ONE repo secret and CI enrichment turns itself on — no YAML editing: `CURSOR_API_KEY` (cursor.com dashboard) or `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`, personal repos). The Action then writes stale/new prose on every push and commits it.
+- **Ambient**: the emitted Cursor rule has Cursor's agent fill prose slots related to files it touched during normal work.
+
 ## Leaving is easy
 
 `pause` detaches the automation reversibly. `remove` strips every integration surgically (foreign hooks and your other AGENTS.md content survive) and **keeps your docs** unless you pass `--docs`. `uninstall` removes the command itself, in plain language a non-developer can follow. Nothing global is ever stored on your machine.
