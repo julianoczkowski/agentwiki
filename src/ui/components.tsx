@@ -42,7 +42,7 @@ export function Logo() {
         <Text bold color={BRAND}>
           AGENTWIKI
         </Text>
-        <Text color="gray">{TAGLINE}</Text>
+        <Text color="white">{TAGLINE}</Text>
         <Text color={BRAND_DIM}>
           {BYLINE} · {CHANNEL}
         </Text>
@@ -71,8 +71,8 @@ export function Logo() {
       <Text bold color={ACCENT}>
         {TAGLINE}
       </Text>
-      <Text color="gray">{SUBTITLE}</Text>
-      <Text color="gray">{FEATURES}</Text>
+      <Text color="white">{SUBTITLE}</Text>
+      <Text color="white">{FEATURES}</Text>
       <Text> </Text>
       <Text color={BRAND_DIM}>{BYLINE}</Text>
       <Link
@@ -120,7 +120,7 @@ export function StatusGlyph({
   if (status === "fail") {
     return <Text color="red">✖</Text>;
   }
-  return <Text color="gray">◇</Text>;
+  return <Text color="white">◇</Text>;
 }
 
 /** OSC-8 terminal hyperlink — clickable in iTerm2, Ghostty, VS Code, etc. */
@@ -184,7 +184,7 @@ export function Section({
       <Text color={BRAND}>│</Text>
       <Text>
         <Text color={BRAND}>{"└ "}</Text>
-        {footer ? <Text color="gray">{footer}</Text> : null}
+        {footer ? <Text color="white">{footer}</Text> : null}
       </Text>
     </Box>
   );
@@ -260,15 +260,15 @@ export function Select({
     <Box flexDirection="column">
       {options.map((option, optionIndex) => (
         <Text key={option.label}>
-          <Text color={optionIndex === index ? "green" : "gray"}>
+          <Text color={optionIndex === index ? "green" : "white"}>
             {optionIndex === index ? "● " : "○ "}
           </Text>
           <Text bold={optionIndex === index}>{option.label}</Text>
-          {option.detail ? <Text color="gray"> ({option.detail})</Text> : null}
+          {option.detail ? <Text color="white"> ({option.detail})</Text> : null}
         </Text>
       ))}
       <Text>
-        <Text color="gray">↑/↓ to navigate · Enter: </Text>
+        <Text color="white">↑/↓ to navigate · Enter: </Text>
         <Text bold>confirm</Text>
       </Text>
     </Box>
@@ -282,7 +282,7 @@ export function Hint({ children }: { children: React.ReactNode }) {
       gutter={
         <Text>
           <Text color={BRAND}>{"│ "}</Text>
-          <Text color="gray">{"  ↳ "}</Text>
+          <Text color="white">{"  ↳ "}</Text>
         </Text>
       }
     >

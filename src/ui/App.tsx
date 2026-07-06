@@ -159,7 +159,7 @@ export function GenerateApp({
         {detected === null ? (
           <Section title="Choose Your Prose Writer" footer="checking…">
             <Line>
-              <Text color="gray">Checking which coding agents you have…</Text>
+              <Text color="white">Checking which coding agents you have…</Text>
             </Line>
           </Section>
         ) : (
@@ -189,7 +189,7 @@ export function GenerateApp({
         {phases.map((phase) => (
           <Item glyph={<StatusGlyph status={phase.status} />} key={phase.id}>
             <Text bold={phase.status === "running"}>{phase.title}</Text>
-            {phase.detail ? <Text color="gray">  {phase.detail}</Text> : null}
+            {phase.detail ? <Text color="white">  {phase.detail}</Text> : null}
           </Item>
         ))}
       </Section>
@@ -235,7 +235,7 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
       >
         <Item glyph={<StatusGlyph status="done" />}>
           {created} pages created, {updated} updated, {removed} removed{" "}
-          <Text color="gray">
+          <Text color="white">
             ({summary.totalFiles} files scanned, {summary.modules} modules)
           </Text>
         </Item>
@@ -245,14 +245,14 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
           }
         >
           Prose slots: <Text color="green">{write.slotCounts.fresh} fresh</Text>
-          <Text color="gray"> · </Text>
+          <Text color="white"> · </Text>
           <Text color="yellow">{write.slotCounts.stale} stale</Text>
-          <Text color="gray"> · </Text>
-          <Text color="gray">{write.slotCounts.empty} empty</Text>
+          <Text color="white"> · </Text>
+          <Text color="white">{write.slotCounts.empty} empty</Text>
         </Item>
         {!summary.workflowPresent ? (
           <Item glyph={<StatusGlyph status="pending" />}>
-            <Text color="gray">
+            <Text color="white">
               CI not wired — run <Text color={ACCENT}>agentwiki setup-action</Text>{" "}
               to re-add the GitHub workflow
             </Text>
@@ -298,7 +298,7 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
                   key={backend.id}
                 >
                   <Text bold>{backend.label.padEnd(12)}</Text>
-                  <Text color="gray">
+                  <Text color="white">
                     {status.installed
                       ? status.auth !== "missing"
                         ? "ready to write prose"
@@ -311,13 +311,13 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
                 <Text bold color={ACCENT}>
                   agentwiki backend
                 </Text>
-                <Text color="gray">  — pick your preferred agent first</Text>
+                <Text color="white">  — pick your preferred agent first</Text>
               </Item>
               <Item glyph={<Text color={ACCENT}>❯</Text>}>
                 <Text bold color={ACCENT}>
                   agentwiki enrich
                 </Text>
-                <Text color="gray">
+                <Text color="white">
                   {"  "}— or write now with whichever agent is ready
                 </Text>
               </Item>
@@ -351,27 +351,27 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
                     }
                   >
                     <Text bold>{backend.label}</Text>{" "}
-                    <Text color={status.installed ? "yellow" : "gray"}>
+                    <Text color={status.installed ? "yellow" : "white"}>
                       {status.installed ? status.authDetail : "not installed"}
                     </Text>
                   </Item>
                   {setupSteps(backend, status).map((step, index) => (
                     <Line key={`${backend.id}-${index}`}>
-                      <Text color="gray">  {index + 1}. </Text>
+                      <Text color="white">  {index + 1}. </Text>
                       {step.run ? (
                         <>
                           <Text color={ACCENT}>{step.run}</Text>
-                          <Text color="gray">  — {step.note}</Text>
+                          <Text color="white">  — {step.note}</Text>
                         </>
                       ) : (
-                        <Text color="gray">{step.note}</Text>
+                        <Text color="white">{step.note}</Text>
                       )}
                     </Line>
                   ))}
                 </Box>
               ))}
               <Line>
-                <Text color="gray">
+                <Text color="white">
                   When the steps are done, run:{" "}
                   <Text color={ACCENT}>agentwiki enrich</Text>
                 </Text>
@@ -430,14 +430,14 @@ export function BackendApp({ root }: { root: string }) {
           </Item>
           {steps.map((step, index) => (
             <Line key={index}>
-              <Text color="gray">  {index + 1}. </Text>
+              <Text color="white">  {index + 1}. </Text>
               {step.run ? (
                 <>
                   <Text color={ACCENT}>{step.run}</Text>
-                  <Text color="gray">  — {step.note}</Text>
+                  <Text color="white">  — {step.note}</Text>
                 </>
               ) : (
-                <Text color="gray">{step.note}</Text>
+                <Text color="white">{step.note}</Text>
               )}
             </Line>
           ))}
@@ -452,7 +452,7 @@ export function BackendApp({ root }: { root: string }) {
       {detected === null ? (
         <Section title="Choose Your Prose Writer" footer="checking…">
           <Line>
-            <Text color="gray">Checking which coding agents you have…</Text>
+            <Text color="white">Checking which coding agents you have…</Text>
           </Line>
         </Section>
       ) : (
@@ -489,10 +489,10 @@ export function HelpApp() {
       <Section
         title="What It Does"
         footer={
-          <Text color="gray">
+          <Text color="white">
             docs:{" "}
             <Link
-              color="gray"
+              color="white"
               label="github.com/julianoczkowski/agentwiki"
               url="https://github.com/julianoczkowski/agentwiki"
             />
@@ -500,7 +500,7 @@ export function HelpApp() {
         }
       >
         <Line>
-          <Text color="gray">{HELP_INTRO}</Text>
+          <Text color="white">{HELP_INTRO}</Text>
         </Line>
       </Section>
       {HELP_GROUPS.map((group) => (
@@ -513,7 +513,7 @@ export function HelpApp() {
               <Text bold color={ACCENT}>
                 {row.command.padEnd(30)}
               </Text>
-              <Text color="gray">{row.description}</Text>
+              <Text color="white">{row.description}</Text>
             </Item>
           ))}
         </Section>
@@ -556,7 +556,7 @@ export function DoctorApp({ root }: { root: string }) {
       >
         {checks === null ? (
           <Line>
-            <Text color="gray">Checking development environment…</Text>
+            <Text color="white">Checking development environment…</Text>
           </Line>
         ) : (
           checks.map((check) => (
@@ -575,7 +575,7 @@ export function DoctorApp({ root }: { root: string }) {
                 }
               >
                 <Text bold>{check.label.padEnd(16)}</Text>
-                <Text color="gray">{check.detail}</Text>
+                <Text color="white">{check.detail}</Text>
               </Item>
               {check.hints?.map((hint) => <Hint key={hint}>{hint}</Hint>)}
             </Box>
@@ -602,7 +602,7 @@ export function StatusApp({ root }: { root: string }) {
     return (
       <Box flexDirection="column">
         <Logo />
-        <Text color="gray">Reading wiki…</Text>
+        <Text color="white">Reading wiki…</Text>
       </Box>
     );
   }
@@ -647,7 +647,7 @@ export function StatusApp({ root }: { root: string }) {
           {report.pages.length} pages ·{" "}
           <Text color="green">{counts.fresh} fresh</Text> ·{" "}
           <Text color="yellow">{counts.stale} stale</Text> ·{" "}
-          <Text color="gray">{counts.empty} empty</Text>
+          <Text color="white">{counts.empty} empty</Text>
         </Item>
         {report.meta ? (
           <Line>
@@ -668,17 +668,17 @@ export function StatusApp({ root }: { root: string }) {
         <Box flexDirection="column">
           {report.pages.map((page) => (
             <Line key={page.file}>
-              <Text color="gray">{page.file.padEnd(36)}</Text>
+              <Text color="white">{page.file.padEnd(36)}</Text>
               {page.slots.map((slot, index) => (
                 <Text key={`${page.file}-${slot.slot}`}>
-                  {index > 0 ? <Text color="gray"> · </Text> : null}
+                  {index > 0 ? <Text color="white"> · </Text> : null}
                   <Text
                     color={
                       slot.status === "fresh"
                         ? "green"
                         : slot.status === "stale"
                           ? "yellow"
-                          : "gray"
+                          : "white"
                     }
                   >
                     {slot.slot}

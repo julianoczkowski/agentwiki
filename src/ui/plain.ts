@@ -23,7 +23,7 @@ export const paint = {
     wrap(hasTrueColor() ? `${ESC}[38;2;0;99;163m` : `${ESC}[38;5;24m`, text),
   accent: (text: string): string => wrap(`${ESC}[36m`, text),
   bold: (text: string): string => wrap(`${ESC}[1m`, text),
-  gray: (text: string): string => wrap(`${ESC}[90m`, text),
+  gray: (text: string): string => wrap(`${ESC}[37m`, text),
   green: (text: string): string => wrap(`${ESC}[32m`, text),
   yellow: (text: string): string => wrap(`${ESC}[33m`, text),
   red: (text: string): string => wrap(`${ESC}[31m`, text),

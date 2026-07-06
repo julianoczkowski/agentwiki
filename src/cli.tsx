@@ -227,6 +227,84 @@ async function main(): Promise<void> {
   }
 }
 
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+function formatElapsed(startedAt: number): string {
+  const seconds = Math.floor((Date.now() - startedAt) / 1000);
+  const minutes = Math.floor(seconds / 60);
+
+  return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`;
+}
+
+/**
+ * Live progress for enrich runs: an in-place spinner with elapsed time on a
+ * TTY, periodic heartbeat lines otherwise. Backend output interrupts the
+ * spinner cleanly and the spinner resumes underneath.
+ */
+function createEnrichProgress(
+  label: string,
+  slotCount: number,
+): { interrupt: (text: string) => void; stop: () => void } {
+  const startedAt = Date.now();
+  const isTTY = Boolean(process.stdout.isTTY);
+  let frame = 0;
+
+  const spinnerLine = (): string =>
+    `${paint.accent(SPINNER_FRAMES[frame])} ${paint.bold(label)} is working on ${slotCount} section(s)… ${formatElapsed(startedAt)}`;
+  const clearLine = (): void => {
+    if (isTTY) {
+      process.stdout.write("\r\u001b[2K");
+    }
+  };
+
+  const timer = isTTY
+    ? setInterval(() => {
+        frame = (frame + 1) % SPINNER_FRAMES.length;
+        clearLine();
+        process.stdout.write(spinnerLine());
+      }, 120)
+    : setInterval(() => {
+        process.stdout.write(
+          `… ${label} is still working (${formatElapsed(startedAt)})\n`,
+        );
+      }, 30_000);
+
+  if (isTTY) {
+    process.stdout.write(spinnerLine());
+  }
+
+  return {
+    interrupt(text: string): void {
+      clearLine();
+      process.stdout.write(text.endsWith("\n") ? text : `${text}\n`);
+      if (isTTY) {
+        process.stdout.write(spinnerLine());
+      }
+    },
+    stop(): void {
+      clearInterval(timer);
+      clearLine();
+    },
+  };
+}
+
+/** Shown when zsh's compaudit warning leaks through the agent's shell. */
+function insecureDirsHint(): string {
+  return plain.thread(
+    "About That zsh Warning",
+    [
+      plain.glyph.warn(
+        `The "insecure directories" question comes from ${paint.bold("zsh on this Mac")}, not agentwiki — it appears inside your agent's shell and the run continues on its own.`,
+      ),
+      plain.line(
+        `Permanent fix — run this once in your terminal, then it never appears again:`,
+      ),
+      plain.line(`  ${paint.accent("compaudit | xargs chmod g-w,o-w")}`),
+    ],
+    "that command removes group/other write access from zsh's completion folders",
+  );
+}
+
 async function confirm(prompt: string): Promise<boolean> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -452,13 +530,33 @@ async function runEnrich(
   }
 
   process.stdout.write(
-    `Enriching ${items.length} prose slot(s) with ${backend.label} (${status.authDetail})…\n\n`,
+    `${plain.thread(
+      `Writing Prose with ${backend.label}`,
+      [
+        plain.line(
+          `${paint.bold(String(items.length))} slot(s) queued · ${status.authDetail}`,
+        ),
+        plain.line(
+          "your agent explores the repo and writes each section — this can take a few minutes",
+        ),
+      ],
+      "keep this terminal open — live progress below",
+    )}\n\n`,
   );
 
+  const progress = createEnrichProgress(backend.label, items.length);
+  let sawInsecureDirs = false;
+
   const result = await backend.enrich(prompt, root, (chunk) => {
-    process.stdout.write(chunk);
+    progress.interrupt(chunk);
+
+    if (!sawInsecureDirs && /insecure directories/i.test(chunk)) {
+      sawInsecureDirs = true;
+      progress.interrupt(`\n${insecureDirsHint()}\n\n`);
+    }
   });
 
+  progress.stop();
   process.stdout.write("\n");
 
   if (result.authFailed) {
