@@ -1,4 +1,7 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { detectBackends, type DetectedBackend } from "./backends/index.js";
+import { WORKFLOW_PATH } from "./constants.js";
 import { buildPages } from "./engine/emit.js";
 import { collectGitFacts } from "./engine/git.js";
 import { buildModuleGraph } from "./engine/graph.js";
@@ -37,6 +40,7 @@ export interface GenerateSummary {
   totalFiles: number;
   modules: number;
   gitHead: string | null;
+  workflowPresent: boolean;
 }
 
 export const GENERATE_PHASES = [
@@ -129,6 +133,13 @@ export async function runGenerate(
         : "no usable agent backend found",
   });
 
+  let workflowPresent = true;
+  try {
+    await fs.access(path.join(root, WORKFLOW_PATH));
+  } catch {
+    workflowPresent = false;
+  }
+
   return {
     mode,
     write,
@@ -137,6 +148,7 @@ export async function runGenerate(
     totalFiles: scan.totalFiles,
     modules: graph.modules.size,
     gitHead: git?.head ?? null,
+    workflowPresent,
   };
 }
 

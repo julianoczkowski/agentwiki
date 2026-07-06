@@ -108,6 +108,13 @@ function GenerateSummaryView({ summary }: { summary: GenerateSummary }) {
         {!write.contentChanged ? (
           <Text color="gray">No content changes — metadata left untouched.</Text>
         ) : null}
+        {!summary.workflowPresent ? (
+          <Text color="gray">
+            CI is not wired (opt-in): run{" "}
+            <Text color="cyan">agentwiki setup-action</Text> to add a GitHub
+            workflow that refreshes facts on every push.
+          </Text>
+        ) : null}
       </Panel>
 
       {pending > 0 ? (
