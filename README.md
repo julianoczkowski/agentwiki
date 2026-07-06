@@ -2,16 +2,15 @@
 
 **A self-maintaining wiki for your codebase — without your wiki tool ever calling an LLM.**
 
+
+https://github.com/user-attachments/assets/fe1411e3-8772-4080-834f-f3cc83f4be2f
+
+
 ```sh
 npx @julianoczkowski/agentwiki init
 ```
 
 One command, two Enter presses, complete wiki. No API keys, no configuration, no new subscription — built for prototyping repos where the "team" is a designer or PM, not a DevOps engineer.
-
-```
-  ▄▀█ █▀▀ █▀▀ █▄░█ ▀█▀ █░█░█ █ █▄▀ █
-  █▀█ █▄█ ██▄ █░▀█ ░█░ ▀▄▀▄▀ █ █░█ █
-```
 
 ## What is it?
 
