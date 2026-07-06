@@ -88,24 +88,17 @@ export async function writeCursorHooks(
 }
 
 /**
- * Insert or refresh the AgentWiki section in AGENTS.md / CLAUDE.md.
- * AGENTS.md is ALWAYS ensured (Cursor and most agents read it natively —
- * a repo with only CLAUDE.md would otherwise be invisible to Cursor);
- * CLAUDE.md is updated when it already exists. Surrounding content is
- * preserved in both.
+ * Insert or refresh the AgentWiki section in BOTH AGENTS.md and CLAUDE.md.
+ * Both files are always ensured after init/update (Cursor reads AGENTS.md,
+ * Claude Code reads CLAUDE.md). Existing files are never overwritten — only
+ * the `## AgentWiki` section is inserted or refreshed in place, and all
+ * surrounding content is preserved.
  */
 export async function writeAgentPointers(
   root: string,
 ): Promise<IntegrationResult[]> {
   const results: IntegrationResult[] = [];
-  const targets = ["AGENTS.md"];
-
-  try {
-    await fs.access(path.join(root, "CLAUDE.md"));
-    targets.push("CLAUDE.md");
-  } catch {
-    // No CLAUDE.md — AGENTS.md alone covers Claude Code too.
-  }
+  const targets = ["AGENTS.md", "CLAUDE.md"];
 
   for (const target of targets) {
     const filePath = path.join(root, target);
