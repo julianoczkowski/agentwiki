@@ -1,4 +1,17 @@
-export const VERSION = "0.1.0";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+// Read from package.json (one level above src/ and dist/) so `npm version`
+// bumps can never drift from what the CLI reports.
+export const VERSION: string = (
+  JSON.parse(
+    readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "package.json"),
+      "utf8",
+    ),
+  ) as { version: string }
+).version;
 
 /** Output directory for the generated wiki, relative to the target repo root. */
 export const WIKI_DIR = "agentwiki";
