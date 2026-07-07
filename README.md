@@ -2,8 +2,9 @@
 
 **A self-maintaining wiki for your codebase.**
 
+Watch on Youtube 👉 VIDEO 
 
-https://github.com/user-attachments/assets/fe1411e3-8772-4080-834f-f3cc83f4be2f
+<img width="2430" height="1367" alt="thumbnail" src="https://github.com/user-attachments/assets/470904a8-7801-4954-9c83-5adeada6e14a" />
 
 
 ```sh
@@ -28,6 +29,9 @@ AgentWiki generates and maintains a documentation wiki (`agentwiki/` in your rep
 3. **"Write the Prose Now?"** — if your agent is ready, press Enter and it writes every section in the same run, with a live spinner and elapsed time. A few minutes later: *"all N slots written — wiki is fully fresh."*
 
 Most users never need a second command. Everything below is automation or power-user territory.
+
+https://github.com/user-attachments/assets/fe1411e3-8772-4080-834f-f3cc83f4be2f
+
 
 ## What init creates
 
