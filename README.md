@@ -2,7 +2,7 @@
 
 **A self-maintaining wiki for your codebase.**
 
-Watch on Youtube 👉 VIDEO 
+Watch on Youtube 👉 [VIDEO](https://youtu.be/jHi7zhT1AJE?si=iDdLV7NpKsZHppyO)
 
 <img width="2430" height="1367" alt="thumbnail" src="https://github.com/user-attachments/assets/470904a8-7801-4954-9c83-5adeada6e14a" />
 
