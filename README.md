@@ -1,6 +1,6 @@
 # AgentWiki
 
-**A self-maintaining wiki for your codebase — without your wiki tool ever calling an LLM.**
+**A self-maintaining wiki for your codebase.**
 
 
 https://github.com/user-attachments/assets/fe1411e3-8772-4080-834f-f3cc83f4be2f
