@@ -1,6 +1,6 @@
 {
   "name": "@julianoczkowski/agentwiki",
-  "version": "0.1.15",
+  "version": "0.2.0",
   "description": "Deterministic codebase wiki engine that recruits the coding agent you already have (Cursor CLI, Claude Code) to write the prose. No API keys, no LLM calls of its own.",
   "license": "MIT",
   "author": "Julian Oczkowski",
