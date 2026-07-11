@@ -21,6 +21,7 @@ import {
 } from "./engine/wiki.js";
 import {
   writeAgentPointers,
+  writeClaudeHooks,
   writeCursorHooks,
   writeCursorRule,
   writeWorkflow,
@@ -71,6 +72,7 @@ export async function runGenerate(
   const integrations: IntegrationResult[] = [
     await writeCursorRule(root),
     await writeCursorHooks(root),
+    await writeClaudeHooks(root),
     ...(await writeAgentPointers(root)),
   ];
 

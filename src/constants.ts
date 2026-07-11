@@ -21,6 +21,8 @@ export const META_FILE = ".agentwiki.json";
 
 export const CURSOR_RULE_PATH = ".cursor/rules/agentwiki.mdc";
 export const CURSOR_HOOKS_PATH = ".cursor/hooks.json";
+/** Claude Code's project settings — where its Stop hook lives (checked in, shared). */
+export const CLAUDE_SETTINGS_PATH = ".claude/settings.json";
 export const WORKFLOW_PATH = ".github/workflows/agentwiki.yml";
 
 /** Directories never scanned. */

@@ -18,11 +18,13 @@ import {
 import {
   pauseCursorRule,
   removeAgentPointers,
+  removeClaudeHook,
   removeCursorHook,
   removeCursorRule,
   removeWorkflow,
   removePausedRuleArtifact,
   resumeCursorRule,
+  writeClaudeHooks,
   writeCursorHooks,
   writeWorkflow,
 } from "./emitters/integrations.js";
@@ -186,6 +188,7 @@ async function main(): Promise<void> {
 
       await pauseCursorRule(root);
       const hook = await removeCursorHook(root);
+      const claudeHook = await removeClaudeHook(root);
       await patchMeta(root, { paused: true });
 
       process.stdout.write(
@@ -195,6 +198,9 @@ async function main(): Promise<void> {
           hook.action !== "absent"
             ? "  - Cursor stop-hook detached from .cursor/hooks.json"
             : "  - No Cursor hook found (already detached)",
+          claudeHook.action !== "absent"
+            ? "  - Claude Code stop-hook detached from .claude/settings.json"
+            : "  - No Claude Code hook found (already detached)",
           "  - `agentwiki update` is now a no-op until you run `agentwiki resume`",
           "",
         ].join("\n"),
@@ -211,10 +217,11 @@ async function main(): Promise<void> {
 
       await resumeCursorRule(root);
       await writeCursorHooks(root);
+      await writeClaudeHooks(root);
       await patchMeta(root, { paused: false });
 
       process.stdout.write(
-        "▶ agentwiki resumed — Cursor rule and hook are re-attached.\n  Consider running `agentwiki update` to refresh facts now.\n",
+        "▶ agentwiki resumed — Cursor rule and hook plus the Claude Code hook are re-attached.\n  Consider running `agentwiki update` to refresh facts now.\n",
       );
       return;
     }
@@ -340,6 +347,9 @@ async function runRemove(docs: boolean, yes: boolean): Promise<void> {
       `.cursor/hooks.json — agentwiki entries only ${paint.gray("(other tools' hooks survive)")}`,
     ),
     plain.glyph.pending(
+      `.claude/settings.json — agentwiki Stop hook only ${paint.gray("(your other settings survive)")}`,
+    ),
+    plain.glyph.pending(
       `AGENTS.md / CLAUDE.md — the AgentWiki section only ${paint.gray("(your other content survives)")}`,
     ),
     plain.glyph.pending(`${WORKFLOW_PATH} ${paint.gray("(if present)")}`),
@@ -378,6 +388,7 @@ async function runRemove(docs: boolean, yes: boolean): Promise<void> {
   const results = [
     await removeCursorRule(root),
     await removeCursorHook(root),
+    await removeClaudeHook(root),
     ...(await removeAgentPointers(root)),
     await removeWorkflow(root),
   ];

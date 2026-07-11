@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  CLAUDE_SETTINGS_PATH,
   CURSOR_HOOKS_PATH,
   CURSOR_RULE_PATH,
   WIKI_DIR,
@@ -29,14 +30,18 @@ const AGENTS_SECTION_HEADING = "## AgentWiki";
 
 const AGENTS_SECTION = `${AGENTS_SECTION_HEADING}
 
-This repository has documentation located in the \`${WIKI_DIR}/\` directory, maintained by the \`agentwiki\` CLI.
+This repository has an agent-maintained wiki in the \`${WIKI_DIR}/\` directory, kept in sync by the \`agentwiki\` CLI.
 
 Start here:
 - [Quickstart](${WIKI_DIR}/quickstart.md)
 - [Architecture](${WIKI_DIR}/architecture.md)
 - [Recent activity](${WIKI_DIR}/activity.md)
 
-When working in this repository, read the quickstart first, then follow its links to module pages. Pages mix machine-generated fact blocks (never edit these) with prose sections you may be asked to write via \`agentwiki queue\`.
+How to work with it:
+- Before exploring the codebase, read \`${WIKI_DIR}/quickstart.md\` and follow its links for context. Prefer the wiki over cold exploration.
+- Wiki pages mix machine-owned fact blocks (\`<!-- agentwiki:facts ... -->\`) with agent-owned prose slots (\`<!-- agentwiki:prose ... -->\`). NEVER edit fact blocks — they are regenerated deterministically by the \`agentwiki\` CLI.
+- After completing a task, run \`npx -y @julianoczkowski/agentwiki@latest queue --json\`. If it lists ANY empty or stale prose slots, fill them (prioritize slots related to files you touched, but do not leave others empty): edit only the text between the prose markers, then set \`status="fresh"\` and \`facts-hash\` to the value reported by the queue for that slot.
+- Keep prose slots to 1-3 tight paragraphs, grounded in code you actually inspected.
 `;
 
 export async function writeCursorRule(root: string): Promise<IntegrationResult> {
@@ -98,6 +103,82 @@ export async function writeCursorHooks(
 
   await fs.writeFile(hooksPath, `${JSON.stringify(existing, null, 2)}\n`, "utf8");
   return { path: CURSOR_HOOKS_PATH, action: "updated" };
+}
+
+/** True when a Claude Code Stop-hook group is one of ours (any legacy command form). */
+function isOurClaudeGroup(group: unknown): boolean {
+  if (typeof group !== "object" || group === null) {
+    return false;
+  }
+  const entries = (group as { hooks?: unknown }).hooks;
+  if (!Array.isArray(entries)) {
+    return false;
+  }
+  return entries.some((entry) => {
+    const command = (entry as { command?: string })?.command ?? "";
+    return (
+      command.startsWith("agentwiki") ||
+      command.includes("@julianoczkowski/agentwiki")
+    );
+  });
+}
+
+/**
+ * Claude Code's native equivalent of the Cursor stop-hook: a Stop hook in the
+ * project's `.claude/settings.json` that runs `agentwiki update` when the agent
+ * finishes responding. Merged non-destructively — foreign settings keys and any
+ * other hook events/groups are preserved. Claude Code prompts the user to trust
+ * the workspace before running a repo-defined hook for the first time.
+ */
+export async function writeClaudeHooks(
+  root: string,
+): Promise<IntegrationResult> {
+  const settingsPath = path.join(root, CLAUDE_SETTINGS_PATH);
+  const ourGroup = { hooks: [{ type: "command", command: HOOK_COMMAND }] };
+
+  let existing: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+    existing =
+      typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : null;
+  } catch {
+    existing = null;
+  }
+
+  if (existing === null) {
+    const content = `${JSON.stringify(
+      { hooks: { Stop: [ourGroup] } },
+      null,
+      2,
+    )}\n`;
+    return writeIfChanged(settingsPath, content);
+  }
+
+  const hooks =
+    typeof existing.hooks === "object" && existing.hooks !== null
+      ? (existing.hooks as Record<string, unknown>)
+      : {};
+  const stopHooks = Array.isArray(hooks.Stop) ? hooks.Stop : [];
+  const ours = stopHooks.filter(isOurClaudeGroup);
+
+  // Leave the file byte-identical when our hook is already the only one present,
+  // so re-running init/update stays a no-op and the user's formatting survives.
+  if (ours.length === 1 && JSON.stringify(ours[0]) === JSON.stringify(ourGroup)) {
+    return { path: CLAUDE_SETTINGS_PATH, action: "unchanged" };
+  }
+
+  // Drop any legacy agentwiki groups, keep foreign ones, append one fresh copy.
+  hooks.Stop = [...stopHooks.filter((group) => !isOurClaudeGroup(group)), ourGroup];
+  existing.hooks = hooks;
+
+  await fs.writeFile(
+    settingsPath,
+    `${JSON.stringify(existing, null, 2)}\n`,
+    "utf8",
+  );
+  return { path: CLAUDE_SETTINGS_PATH, action: "updated" };
 }
 
 /**
@@ -297,17 +378,14 @@ export async function removeCursorHook(root: string): Promise<RemovalResult> {
   }
 
   const hooks = existing.hooks ?? {};
-  const isOurs = (hook: unknown): boolean =>
-    typeof hook === "object" &&
-    hook !== null &&
-    ((hook as { command?: string }).command?.startsWith("agentwiki") ?? false);
 
   let changed = false;
   for (const [event, entries] of Object.entries(hooks)) {
     if (!Array.isArray(entries)) {
       continue;
     }
-    const kept = entries.filter((entry) => !isOurs(entry));
+    // Match both the legacy `agentwiki …` command and the npx form we now write.
+    const kept = entries.filter((entry) => !isOurHook(entry));
     if (kept.length !== entries.length) {
       changed = true;
       if (kept.length === 0) {
@@ -330,6 +408,69 @@ export async function removeCursorHook(root: string): Promise<RemovalResult> {
   existing.hooks = hooks;
   await fs.writeFile(hooksPath, `${JSON.stringify(existing, null, 2)}\n`, "utf8");
   return { path: CURSOR_HOOKS_PATH, action: "detached" };
+}
+
+/**
+ * Remove our Stop hook from `.claude/settings.json`, preserving every foreign
+ * setting and hook. The file is deleted only if it becomes an empty object.
+ */
+export async function removeClaudeHook(root: string): Promise<RemovalResult> {
+  const settingsPath = path.join(root, CLAUDE_SETTINGS_PATH);
+
+  let existing: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(await fs.readFile(settingsPath, "utf8"));
+    if (typeof parsed !== "object" || parsed === null) {
+      return { path: CLAUDE_SETTINGS_PATH, action: "absent" };
+    }
+    existing = parsed as Record<string, unknown>;
+  } catch {
+    return { path: CLAUDE_SETTINGS_PATH, action: "absent" };
+  }
+
+  const hooks =
+    typeof existing.hooks === "object" && existing.hooks !== null
+      ? (existing.hooks as Record<string, unknown>)
+      : null;
+  if (!hooks) {
+    return { path: CLAUDE_SETTINGS_PATH, action: "absent" };
+  }
+
+  let changed = false;
+  for (const [event, groups] of Object.entries(hooks)) {
+    if (!Array.isArray(groups)) {
+      continue;
+    }
+    const kept = groups.filter((group) => !isOurClaudeGroup(group));
+    if (kept.length !== groups.length) {
+      changed = true;
+      if (kept.length === 0) {
+        delete hooks[event];
+      } else {
+        hooks[event] = kept;
+      }
+    }
+  }
+
+  if (!changed) {
+    return { path: CLAUDE_SETTINGS_PATH, action: "absent" };
+  }
+
+  if (Object.keys(hooks).length === 0) {
+    delete existing.hooks;
+  }
+
+  if (Object.keys(existing).length === 0) {
+    await fs.rm(settingsPath, { force: true });
+    return { path: CLAUDE_SETTINGS_PATH, action: "removed" };
+  }
+
+  await fs.writeFile(
+    settingsPath,
+    `${JSON.stringify(existing, null, 2)}\n`,
+    "utf8",
+  );
+  return { path: CLAUDE_SETTINGS_PATH, action: "detached" };
 }
 
 /** Strip the AgentWiki section from AGENTS.md / CLAUDE.md; delete files that end up empty. */
