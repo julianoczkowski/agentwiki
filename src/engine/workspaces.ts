@@ -38,6 +38,16 @@ const PACKAGE_SEGMENTS = new Set([
 /** Path segments that mark a workspace member as an application. */
 const APP_SEGMENTS = new Set(["apps", "applications", "services"]);
 
+/** Test-runner projects (foo-e2e, foo-integration-tests) are not documentation targets. */
+const TEST_APP_SUFFIX = /(^|[-_.])(e2e|integration-tests?)$/;
+
+/** NX project-graph caches, newest layout first. */
+const NX_GRAPH_CACHES = [
+  ".nx/workspace-data/project-graph.json",
+  ".nx/cache/project-graph.json",
+  "node_modules/.cache/nx/project-graph.json",
+];
+
 interface NxLayout {
   appsDir: string | null;
   libsDir: string | null;
@@ -85,9 +95,14 @@ export async function detectWorkspaceApps(root: string): Promise<WorkspaceApp[]>
   await sweepForManifestDirs(root, "", 1, dirs, nestedRoots);
 
   // Apply workspace configs of the repo root and every nested workspace
-  // root, prefixing their members with the nested root's path.
+  // root, prefixing their members with the nested root's path. NX's own
+  // project-graph cache is authoritative where present — it knows projects
+  // that plugins infer from build configs with no manifest on disk at all
+  // (e.g. a legacy webpack app that only NX can see).
   const workspaceRoots = ["", ...nestedRoots.slice(0, MAX_NESTED_WORKSPACES)];
   const layouts: { prefix: string; nx: NxLayout }[] = [];
+  const graphKinds = new Map<string, "app" | "package">();
+  const graphNames = new Map<string, string>();
 
   for (const prefix of workspaceRoots) {
     const base = prefix ? path.join(root, prefix) : root;
@@ -109,6 +124,16 @@ export async function detectWorkspaceApps(root: string): Promise<WorkspaceApp[]>
         dirs.add(prefix ? `${prefix}/${dir}` : dir);
       }
     }
+
+    for (const [projectDir, project] of await readNxGraphProjects(base)) {
+      const full = prefix ? `${prefix}/${projectDir}` : projectDir;
+      // The cache can be stale — only offer dirs that still exist.
+      if (await isUsableDir(root, full)) {
+        dirs.add(full);
+        graphKinds.set(full, project.kind);
+        graphNames.set(full, project.name);
+      }
+    }
   }
 
   // A workspace root is a container, not an app someone documents.
@@ -116,33 +141,104 @@ export async function detectWorkspaceApps(root: string): Promise<WorkspaceApp[]>
     dirs.delete(prefix);
   }
 
-  const apps = await Promise.all(
+  // The sweep may have wandered inside a graph-known project (vendored
+  // subfolders with their own package.json) — the project boundary wins.
+  for (const dir of [...dirs]) {
+    for (const boundary of graphKinds.keys()) {
+      if (dir !== boundary && dir.startsWith(`${boundary}/`)) {
+        dirs.delete(dir);
+        break;
+      }
+    }
+  }
+
+  const members = await Promise.all(
     [...dirs].sort().map(
       async (dir): Promise<WorkspaceApp> => ({
         dir,
-        name: await readAppName(root, dir),
-        kind: await classify(root, dir, layouts),
+        name: (await readAppName(root, dir)) ?? graphNames.get(dir) ?? null,
+        kind: await classify(root, dir, layouts, graphKinds),
       }),
     ),
   );
 
-  return apps
-    .sort((a, b) =>
-      a.kind === b.kind ? a.dir.localeCompare(b.dir) : a.kind === "app" ? -1 : 1,
-    )
-    .slice(0, MAX_APPS);
+  const sorted = members.sort((a, b) => a.dir.localeCompare(b.dir));
+  return [
+    ...sorted.filter((member) => member.kind === "app").slice(0, MAX_APPS),
+    ...sorted.filter((member) => member.kind === "package").slice(0, MAX_APPS),
+  ];
 }
 
 /**
- * App vs shared package, strongest signal first: the member's own NX
- * project.json, each workspace root's nx.json layout, then path-name
- * heuristics. Unknown shapes default to "app" — better to offer than hide.
+ * Projects from NX's project-graph cache: dir (relative to the workspace
+ * root) → { kind, name }. NX "app" nodes are apps; "e2e" and "lib" nodes
+ * are shared/support projects.
+ */
+async function readNxGraphProjects(
+  base: string,
+): Promise<Map<string, { kind: "app" | "package"; name: string }>> {
+  for (const cache of NX_GRAPH_CACHES) {
+    let nodes: Record<string, { type?: unknown; data?: { root?: unknown } }>;
+    try {
+      const parsed = JSON.parse(
+        await fs.readFile(path.join(base, cache), "utf8"),
+      ) as {
+        graph?: { nodes?: typeof nodes };
+        nodes?: typeof nodes;
+      };
+      const found = parsed.graph?.nodes ?? parsed.nodes;
+      if (!found) {
+        continue;
+      }
+      nodes = found;
+    } catch {
+      continue;
+    }
+
+    const projects = new Map<string, { kind: "app" | "package"; name: string }>();
+    for (const [name, node] of Object.entries(nodes)) {
+      const dir =
+        typeof node.data?.root === "string"
+          ? node.data.root.replace(/\\/g, "/").replace(/^\.\/|\/+$/g, "")
+          : "";
+      if (dir === "" || dir === ".") {
+        continue;
+      }
+      projects.set(dir, {
+        kind: node.type === "app" ? "app" : "package",
+        name,
+      });
+    }
+    if (projects.size > 0) {
+      return projects;
+    }
+  }
+  return new Map();
+}
+
+/**
+ * App vs shared package, strongest signal first: test-runner naming
+ * (foo-e2e is never a documentation target), the NX project graph, the
+ * member's own project.json, each workspace root's nx.json layout, then
+ * path-name heuristics. Unknown shapes default to "app" — better to offer
+ * than hide.
  */
 async function classify(
   root: string,
   dir: string,
   layouts: { prefix: string; nx: NxLayout }[],
+  graphKinds: Map<string, "app" | "package">,
 ): Promise<"app" | "package"> {
+  const basename = dir.split("/").pop() ?? dir;
+  if (TEST_APP_SUFFIX.test(basename)) {
+    return "package";
+  }
+
+  const fromGraph = graphKinds.get(dir);
+  if (fromGraph) {
+    return fromGraph;
+  }
+
   try {
     const parsed = JSON.parse(
       await fs.readFile(path.join(root, dir, "project.json"), "utf8"),

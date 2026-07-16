@@ -2,6 +2,16 @@
 
 All notable changes to `@julianoczkowski/agentwiki` are documented here.
 
+## 1.1.2 — 2026-07-16
+
+### NX project graph as the source of truth (fix)
+
+Apps that NX infers from build configs via plugins — with no `project.json` or `package.json` in the app folder at all (typical for large legacy apps) — were invisible to filesystem detection.
+
+- **NX project-graph cache** — detection now reads `.nx/workspace-data/project-graph.json` (with older cache locations as fallbacks) in every workspace root. Projects come from NX itself: `app` nodes are offered as apps (labeled with their NX project name), `lib`/`e2e` nodes as shared packages. Stale cache entries (deleted dirs) are skipped, and folders vendored *inside* a known project can no longer surface as members.
+- **Test runners declassified** — `*-e2e` and `*-integration-tests` projects are never listed as apps (even when NX types them as applications); they stay available behind "Something else…". A 23-project `apps/` folder now presents as the handful of real products.
+- **Per-kind cap** — the previous global 24-member cap could let libraries crowd out apps; apps and packages are now capped independently.
+
 ## 1.1.1 — 2026-07-16
 
 ### Nested workspace roots (fix)

@@ -204,6 +204,80 @@ describe("detectWorkspaceApps", () => {
     ]);
   });
 
+  it("reads the NX project-graph cache: manifest-less apps, e2e demotion, stale entries", async () => {
+    const root = await makeRepo({
+      "clients/nx.json": JSON.stringify({}),
+      "clients/package.json": JSON.stringify({ name: "clients-ws" }),
+      // NX knows tcweb is an app even though it has NO manifest on disk
+      // (plugin-inferred from its webpack config).
+      "clients/.nx/workspace-data/project-graph.json": JSON.stringify({
+        graph: {
+          nodes: {
+            tcweb: { type: "app", data: { root: "apps/tcweb" } },
+            "tcweb-e2e": { type: "e2e", data: { root: "apps/tcweb-e2e" } },
+            "maya-viewer": { type: "app", data: { root: "apps/maya-viewer" } },
+            "shared-ui": { type: "lib", data: { root: "libs/shared-ui" } },
+            ghost: { type: "app", data: { root: "apps/deleted-long-ago" } },
+          },
+        },
+      }),
+      "clients/apps/tcweb/webpack.config.js": "module.exports = {};",
+      // Vendored subfolder with its own package.json must not become a member.
+      "clients/apps/tcweb/build/components/react-hotkeys/package.json":
+        JSON.stringify({ name: "react-hotkeys" }),
+      "clients/apps/tcweb-e2e/project.json": JSON.stringify({
+        name: "tcweb-e2e",
+        projectType: "application",
+      }),
+      "clients/apps/maya-viewer/project.json": JSON.stringify({
+        name: "@trimble/maya-viewer",
+        projectType: "application",
+      }),
+      "clients/libs/shared-ui/project.json": JSON.stringify({
+        name: "shared-ui",
+        projectType: "library",
+      }),
+    });
+
+    const apps = await detectWorkspaceApps(root);
+
+    expect(apps.map((app) => `${app.dir}:${app.kind}`)).toEqual([
+      "clients/apps/maya-viewer:app",
+      "clients/apps/tcweb:app",
+      "clients/apps/tcweb-e2e:package",
+      "clients/libs/shared-ui:package",
+    ]);
+    // Stale graph entries and vendored subfolders never surface.
+    expect(apps.some((app) => app.dir.includes("deleted-long-ago"))).toBe(false);
+    expect(apps.some((app) => app.dir.includes("react-hotkeys"))).toBe(false);
+  });
+
+  it("demotes e2e and integration-test projects even when typed as applications", async () => {
+    const root = await makeRepo({
+      "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n',
+      "apps/viewer/project.json": JSON.stringify({
+        name: "viewer",
+        projectType: "application",
+      }),
+      "apps/viewer-e2e/project.json": JSON.stringify({
+        name: "viewer-e2e",
+        projectType: "application",
+      }),
+      "apps/viewer-integration-tests/project.json": JSON.stringify({
+        name: "viewer-integration-tests",
+        projectType: "application",
+      }),
+    });
+
+    const apps = await detectWorkspaceApps(root);
+
+    expect(apps.map((app) => `${app.dir}:${app.kind}`)).toEqual([
+      "apps/viewer:app",
+      "apps/viewer-e2e:package",
+      "apps/viewer-integration-tests:package",
+    ]);
+  });
+
   it("finds at most one app in a single-project repo", async () => {
     const root = await makeRepo({
       "package.json": JSON.stringify({ name: "single" }),
