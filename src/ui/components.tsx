@@ -240,11 +240,15 @@ export interface SelectOption {
 export function Select({
   options,
   onSelect,
+  initialIndex = 0,
 }: {
   options: SelectOption[];
   onSelect: (index: number) => void;
+  initialIndex?: number;
 }) {
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(
+    initialIndex >= 0 && initialIndex < options.length ? initialIndex : 0,
+  );
 
   useInput((_input, key) => {
     if (key.upArrow) {

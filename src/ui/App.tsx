@@ -9,7 +9,7 @@ import {
 import type { BackendId } from "../backends/types.js";
 import { HELP_EXAMPLES, HELP_GROUPS, HELP_INTRO } from "../commands.js";
 import { patchMeta, readMeta, saveBackendPreference } from "../engine/wiki.js";
-import type { WorkspaceApp } from "../engine/workspaces.js";
+import { matchAppForPath, type WorkspaceApp } from "../engine/workspaces.js";
 import {
   gatherStatus,
   runDoctor,
@@ -100,20 +100,25 @@ function BackendPicker({
  */
 function ScopePicker({
   apps,
+  invokedFrom = "",
   onDone,
   root,
 }: {
   apps: WorkspaceApp[];
+  invokedFrom?: string;
   onDone: () => void;
   root: string;
 }) {
-  const [showAll, setShowAll] = useState(false);
+  // Standing inside an app when running init is a strong hint — pre-select it.
+  const suggested = matchAppForPath(apps, invokedFrom);
+  const [showAll, setShowAll] = useState(suggested?.kind === "package");
   const applications = apps.filter((app) => app.kind === "app");
   const packages = apps.filter((app) => app.kind === "package");
   // No recognizable apps (or user expanded): offer every workspace member.
   const listed =
     showAll || applications.length === 0 ? [...applications, ...packages] : applications;
   const expandable = !showAll && applications.length > 0 && packages.length > 0;
+  const suggestedIndex = suggested ? listed.indexOf(suggested) : -1;
 
   const options = [
     {
@@ -122,10 +127,11 @@ function ScopePicker({
     },
     ...listed.map((app) => ({
       label: `${app.dir}/`,
-      detail:
+      detail: `${
         app.kind === "package"
           ? `${app.name ?? "detected"} — shared package`
-          : app.name ?? "detected app",
+          : app.name ?? "detected app"
+      }${app === suggested ? " — you ran init from here" : ""}`,
     })),
     ...(expandable
       ? [
@@ -153,6 +159,7 @@ function ScopePicker({
         one of them in depth, or the whole repository at once.
       </Line>
       <Select
+        initialIndex={suggestedIndex >= 0 ? suggestedIndex + 1 : 0}
         options={options}
         onSelect={(index) => {
           if (expandable && index === options.length - 1) {
@@ -191,12 +198,14 @@ export function GenerateApp({
   mode,
   root,
   askBackend = false,
+  invokedFrom = "",
   scopeApps = [],
   onEnrichChosen,
 }: {
   mode: GenerateMode;
   root: string;
   askBackend?: boolean;
+  invokedFrom?: string;
   scopeApps?: WorkspaceApp[];
   onEnrichChosen?: () => void;
 }) {
@@ -275,6 +284,7 @@ export function GenerateApp({
         <Logo />
         <ScopePicker
           apps={scopeApps}
+          invokedFrom={invokedFrom}
           onDone={() => setStage(askBackend ? "pick" : "run")}
           root={root}
         />
@@ -316,6 +326,14 @@ export function GenerateApp({
               : `done — ${WIKI_DIR}/quickstart.md`
         }
       >
+        {invokedFrom ? (
+          <Line>
+            <Text color="white">
+              running from <Text bold>{invokedFrom}/</Text> — everything is
+              created at the repo root
+            </Text>
+          </Line>
+        ) : null}
         {phases.map((phase) => (
           <Item glyph={<StatusGlyph status={phase.status} />} key={phase.id}>
             <Text bold={phase.status === "running"}>{phase.title}</Text>

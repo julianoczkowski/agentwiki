@@ -257,6 +257,30 @@ export async function runDoctor(root: string): Promise<DoctorCheck[]> {
     }
   }
 
+  // Wikis created in a subfolder (pre-1.1 runs from inside a monorepo dir)
+  // are dead weight: their .github workflow and rules never load there.
+  const scan = await scanRepository(root);
+  const nestedWikis = scan.files
+    .filter((file) => /\/agentwiki\/quickstart\.md$/.test(file))
+    .map((file) => file.replace(/\/agentwiki\/quickstart\.md$/, ""));
+  if (nestedWikis.length > 0) {
+    checks.push({
+      label: "Nested wikis",
+      status: "warn",
+      detail: `wiki folders found below the repo root: ${nestedWikis
+        .map((dir) => `${dir}/agentwiki`)
+        .join(", ")}`,
+      hints: [
+        "these were created by running init from a subfolder (before v1.1) — integrations there never load",
+        ...nestedWikis.map(
+          (dir) =>
+            `delete ${dir}/agentwiki plus any ${dir}/.cursor, ${dir}/.claude, ${dir}/AGENTS.md, ${dir}/CLAUDE.md and ${dir}/.github/workflows/agentwiki.yml`,
+        ),
+        "then run `agentwiki init` — everything is now created at the repo root",
+      ],
+    });
+  }
+
   const initialized = await wikiExists(root);
   const meta = await readMeta(root);
   checks.push({

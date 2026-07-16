@@ -2,6 +2,18 @@
 
 All notable changes to `@julianoczkowski/agentwiki` are documented here.
 
+## 1.1.0 — 2026-07-16
+
+### Everything anchors at the repo root
+
+Running any `agentwiki` command from a monorepo subfolder used to create a second wiki (plus rules and a dead `.github` workflow) inside that subfolder. Now:
+
+- **Git-root anchoring** — every command resolves the git repository root (`git rev-parse --show-toplevel`) and creates/reads all artifacts there: `agentwiki/`, `.cursor/`, `.claude/`, `AGENTS.md`/`CLAUDE.md`, `.github/workflows/agentwiki.yml`. Outside a git repo, the current directory is used as before.
+- **"You are here" pre-selection** — running `init` from inside an app's folder pre-selects that app in the monorepo picker (labeled "you ran init from here"), so a single Enter scopes to it.
+- **Visible anchoring** — when invoked from a subfolder, the setup screen says `running from <dir>/ — everything is created at the repo root`.
+- **`doctor` detects orphaned nested wikis** — wikis created in subfolders by pre-1.1 runs are reported with step-by-step cleanup hints.
+- **README** — new "How it works" Mermaid diagram showing the CLI ⇄ wiki ⇄ coding-agent loop and the GitHub Actions / editor-hook automation.
+
 ## 1.0.0 — 2026-07-16
 
 ### Monorepo support 🎉

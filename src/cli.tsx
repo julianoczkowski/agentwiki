@@ -43,9 +43,24 @@ import * as plain from "./ui/plain.js";
 import { paint } from "./ui/plain.js";
 
 const command = parseArgs(process.argv.slice(2));
-const root = process.cwd();
+
+// All artifacts anchor at the git repo root, no matter which monorepo
+// subfolder the CLI is invoked from. Outside a git repo, cwd is the root.
+const invocationDir = process.cwd();
+let root = invocationDir;
+/** Where the user stands inside the repo ("" at the root) — a scope hint. */
+let invokedFrom = "";
 
 async function main(): Promise<void> {
+  const { findRepoRoot } = await import("./engine/root.js");
+  // realpath both sides: git reports physical paths, cwd may be a symlink.
+  root = await fs
+    .realpath((await findRepoRoot(invocationDir)) ?? invocationDir)
+    .catch(() => invocationDir);
+  const realCwd = await fs.realpath(invocationDir).catch(() => invocationDir);
+  const relative = path.relative(root, realCwd).split(path.sep).join("/");
+  invokedFrom = relative.startsWith("..") ? "" : relative;
+
   switch (command.kind) {
     case "help":
       render(<HelpApp />);
@@ -137,6 +152,7 @@ async function main(): Promise<void> {
       const instance = render(
         <GenerateApp
           askBackend={askBackend}
+          invokedFrom={invokedFrom}
           scopeApps={scopeApps}
           mode={command.kind}
           onEnrichChosen={() => {

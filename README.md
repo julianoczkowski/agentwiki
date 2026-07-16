@@ -20,6 +20,37 @@ AgentWiki generates and maintains a documentation wiki (`agentwiki/` in your rep
 - **Fact blocks** — machine-owned. Generated deterministically from your code: files, exported symbols, import graphs (with a Mermaid diagram), manifests, and git history. Regenerated on every run, they can never hallucinate and never go stale silently.
 - **Prose sections** — narrative explanations ("what is this module for", "what are we working on"). AgentWiki doesn't write these itself and never calls an LLM. Instead it hands them to **the coding agent you already pay for** — Cursor CLI or Claude Code, on your existing subscription.
 
+## How it works
+
+```mermaid
+flowchart TB
+    subgraph repo["📦 Your repository"]
+        code["Source code<br/>+ git history"]
+        wiki["agentwiki/*.md<br/><b>fact blocks</b> — machine-owned<br/><b>prose slots</b> — agent-written"]
+    end
+
+    cli["<b>agentwiki CLI</b><br/>deterministic analysis<br/>no LLM · no API keys"]
+    agent["<b>Your coding agent</b><br/>Cursor CLI or Claude Code<br/>on your existing subscription"]
+    reader["👩‍💻 Developers & 🤖 AI agents<br/>read the wiki first"]
+
+    code -- "scan · symbols · module graph · git facts" --> cli
+    cli -- "writes fact blocks,<br/>flags stale prose" --> wiki
+    wiki -- "queue of empty/stale slots<br/>(agentwiki enrich)" --> agent
+    agent -- "writes prose between markers" --> wiki
+    wiki --> reader
+
+    subgraph auto["🔁 Hands-free automation"]
+        hooks["Cursor rule + stop hook<br/>Claude Code stop hook<br/>→ agentwiki update after each session"]
+        gha["GitHub Actions on every push<br/>→ refresh facts · commit back<br/>optional: prose in CI with one secret"]
+    end
+
+    hooks --> cli
+    gha --> cli
+    gha -. "CURSOR_API_KEY or<br/>CLAUDE_CODE_OAUTH_TOKEN" .-> agent
+```
+
+The loop: the CLI keeps the *facts* true on every change (locally via editor hooks, remotely via GitHub Actions), and whenever facts change under a prose section, that section is flagged stale and queued for your agent to rewrite — so the narrative can drift for at most one enrich cycle, and nothing is ever hallucinated into the fact tables.
+
 ## The one-command experience
 
 `init` walks you through everything interactively:
@@ -67,6 +98,7 @@ Point the wiki at one app instead of the whole repo. On a fresh `init` in a mono
 - **Apps only, by default:** shared packages and libraries stay behind "Something else…" so the choice is obvious.
 - **Everything is scoped:** file scan, module graph, symbols, hot files, and recent commits cover only the chosen app; commits to other apps never touch your wiki's prose.
 - **Set it directly:** `agentwiki init --scope apps/web` (CI-friendly), `--scope .` to go back to whole-repo. The choice is saved in `agentwiki/.agentwiki.json` — hooks and CI honor it with zero prompts.
+- **Run it from anywhere:** every command anchors at the **git repo root**, no matter which subfolder you're standing in — the wiki, rules, hooks, and the GitHub workflow always land in one canonical place, exactly as in a single-project repo. Bonus: run `init` from inside an app's folder and that app comes pre-selected in the picker.
 
 ## How it stays current — the full lifecycle, hands-free
 

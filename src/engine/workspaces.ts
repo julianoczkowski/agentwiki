@@ -43,6 +43,31 @@ interface NxLayout {
 }
 
 /**
+ * The workspace member whose directory contains `relPath` (a repo-relative
+ * posix path, e.g. where the user invoked the CLI from). Longest match wins;
+ * "" or no match → null. Used to pre-select "the app you're standing in".
+ */
+export function matchAppForPath(
+  apps: WorkspaceApp[],
+  relPath: string | null | undefined,
+): WorkspaceApp | null {
+  if (!relPath) {
+    return null;
+  }
+  const normalized = relPath.replace(/\\/g, "/");
+
+  let best: WorkspaceApp | null = null;
+  for (const app of apps) {
+    if (normalized === app.dir || normalized.startsWith(`${app.dir}/`)) {
+      if (!best || app.dir.length > best.dir.length) {
+        best = app;
+      }
+    }
+  }
+  return best;
+}
+
+/**
  * Find the apps/packages of a monorepo: workspace globs from package.json,
  * pnpm-workspace.yaml, and nx.json, plus a shallow filesystem sweep for
  * nested manifests (covers Go/Rust/Python monorepos with no JS workspace
