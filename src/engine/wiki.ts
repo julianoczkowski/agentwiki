@@ -84,6 +84,28 @@ export async function patchMeta(
   );
 }
 
+/**
+ * Normalize a user-supplied scope value to a repo-relative posix path.
+ * "" means whole repository; null means rejected (absolute or escaping).
+ */
+export function normalizeScope(input: string): string | null {
+  const cleaned = input
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/\/+$/, "");
+  if (cleaned === "" || cleaned === ".") {
+    return "";
+  }
+  if (
+    path.isAbsolute(cleaned) ||
+    cleaned.split("/").some((segment) => segment === "..")
+  ) {
+    return null;
+  }
+  return cleaned;
+}
+
 export async function saveBackendPreference(
   root: string,
   backend: "cursor" | "claude",

@@ -55,7 +55,7 @@ The loop: the CLI keeps the *facts* true on every change (locally via editor hoo
 
 `init` walks you through everything interactively:
 
-1. **Monorepo? Pick your app** — when the repo contains multiple apps/packages (npm/pnpm workspaces, NX — including custom `workspaceLayout` dirs like `clients/apps` and `project.json`-only apps, `apps/*`-style layouts, nested Go/Rust/Python manifests), an arrow-key select asks which app the wiki should document — one app in depth, or the whole repository. Only *applications* are listed; shared packages/libraries sit behind a "Something else…" option so the list stays clean. The choice is saved, and every later `update` (hooks, CI) honors it silently. Single-project repos never see this question. Change it any time with `agentwiki init --scope <dir>` (`--scope .` = whole repo).
+1. **Monorepo? Pick what to document** — when the repo contains multiple apps/packages, init asks what the wiki should cover: **the folder you ran init from** (pre-selected — just press Enter), **the whole repository**, or **a typed path** (validated as you confirm). No auto-detected app list to scroll through — you know your repo better than any heuristic. The choice is saved, and every later `update` (hooks, CI) honors it silently. Single-project repos never see this question. Change it any time with `agentwiki init --scope <dir>` (`--scope .` = whole repo).
 2. **Pick your prose writer** — arrow-key select between Cursor CLI and Claude Code, with live readiness shown for each (installed? signed in?). If a tool is missing or logged out, you get numbered *type-this-in-your-terminal* steps, written for non-developers.
 3. **Watch the wiki generate** — scan, git mining, symbol extraction, module graph, page generation, integration wiring, each with live progress.
 4. **"Write the Prose Now?"** — if your agent is ready, press Enter and it writes every section in the same run, with a live spinner and elapsed time. A few minutes later: *"all N slots written — wiki is fully fresh."*
@@ -80,27 +80,23 @@ https://github.com/user-attachments/assets/fe1411e3-8772-4080-834f-f3cc83f4be2f
 
 ## Monorepos
 
-Point the wiki at one app instead of the whole repo. On a fresh `init` in a monorepo, AgentWiki detects your applications and asks which one to document:
+Point the wiki at one app instead of the whole repo. The recommended flow — `cd` into the app, run init, press Enter:
 
 ```
-┌ Which App Should the Wiki Document?
+┌ What Should the Wiki Document?
 │
-│ This looks like a monorepo with 2 apps. AgentWiki can document
-│ one of them in depth, or the whole repository at once.
+│ This repository contains multiple apps/packages. AgentWiki can
+│ document one folder in depth, or the whole repository at once.
 │
-● The whole repository (one wiki covering everything at once)
-○ apps/admin/ (@repo/admin)
-○ apps/web/ (@repo/web)
-○ Something else… (show 2 shared packages/libraries too)
+● This folder: clients/apps/tcweb/ (where you ran init from)
+○ The whole repository (one wiki covering everything at once)
+○ Type a folder path… (e.g. clients/apps/my-app)
 ```
 
-- **Detected layouts:** npm/pnpm workspaces, NX (custom `workspaceLayout` dirs like `clients/apps`, `project.json`-only apps), plain `apps/*` conventions, and nested Go/Rust/Python manifests up to three levels deep.
-- **Apps only, by default:** shared packages and libraries stay behind "Something else…" so the choice is obvious.
-- **Everything is scoped:** file scan, module graph, symbols, hot files, and recent commits cover only the chosen app; commits to other apps never touch your wiki's prose.
-- **Set it directly:** `agentwiki init --scope apps/web` (CI-friendly), `--scope .` to go back to whole-repo. The choice is saved in `agentwiki/.agentwiki.json` — hooks and CI honor it with zero prompts.
-- **Run it from anywhere:** every command anchors at the **git repo root**, no matter which subfolder you're standing in — the wiki, rules, hooks, and the GitHub workflow always land in one canonical place, exactly as in a single-project repo.
-- **The foolproof path — run `init` from inside your app's folder:** if it's a detected app it comes pre-selected; if detection didn't recognize it, the picker offers **"This folder"** pre-selected instead. Either way, one Enter scopes the wiki to the app you're standing in — detection is a convenience, never a gatekeeper.
-- **NX-aware:** the NX project graph cache is the source of truth where present (so even plugin-inferred apps with no manifest file are listed, labeled with their NX names); `*-e2e` and `*-integration-tests` projects are kept out of the app list.
+- **You choose, explicitly:** the folder you're standing in (pre-selected), the whole repository, or a typed path (validated against the repo). No auto-detected list to scroll — works identically for NX, pnpm, Turbo, Go, or any layout, because it doesn't guess.
+- **Everything is scoped:** file scan, module graph, symbols, hot files, and recent commits cover only the chosen folder; commits elsewhere never touch your wiki's prose. Every page carries a banner stating what its paths are relative to.
+- **Everything anchors at the git repo root:** the wiki, rules, hooks, and the GitHub workflow land in one canonical place no matter which subfolder you run commands from — exactly as in a single-project repo.
+- **Set it directly:** `agentwiki init --scope clients/apps/tcweb` (CI-friendly), `--scope .` for whole-repo. Saved in `agentwiki/.agentwiki.json` — hooks and CI honor it with zero prompts.
 
 ## How it stays current — the full lifecycle, hands-free
 

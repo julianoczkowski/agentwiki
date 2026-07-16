@@ -8,11 +8,9 @@ import path from "node:path";
 import { HELP_TEXT, parseArgs } from "./commands.js";
 import { VERSION, WIKI_DIR, WORKFLOW_PATH } from "./constants.js";
 import { buildEnrichPrompt, scanQueue } from "./engine/queue.js";
+import { detectWorkspaceApps } from "./engine/workspaces.js";
 import {
-  detectWorkspaceApps,
-  type WorkspaceApp,
-} from "./engine/workspaces.js";
-import {
+  normalizeScope,
   patchMeta,
   readMeta,
   saveBackendPreference,
@@ -127,19 +125,17 @@ async function main(): Promise<void> {
         await patchMeta(root, { paused: false });
       }
 
-      // Very first step of an interactive init: in a monorepo, ask which app
-      // the wiki should document. Asked until an answer is recorded in meta
-      // ("" = whole repo), then never again — `update` and hooks stay
-      // prompt-free either way.
-      const detectedApps =
+      // Very first step of an interactive init: in a monorepo, ask what the
+      // wiki should document. Detection is only a yes/no monorepo signal —
+      // the choice itself is manual (this folder / whole repo / typed path).
+      // Asked until an answer is recorded in meta ("" = whole repo), then
+      // never again — `update` and hooks stay prompt-free either way.
+      const askScope =
         command.kind === "init" &&
         command.scope === null &&
         Boolean(process.stdin.isTTY) &&
-        meta?.scope === undefined
-          ? await detectWorkspaceApps(root)
-          : [];
-      const scopeApps: WorkspaceApp[] =
-        detectedApps.length >= 2 ? detectedApps : [];
+        meta?.scope === undefined &&
+        (await detectWorkspaceApps(root)).length >= 2;
 
       // Next step of an interactive init: pick which agent writes the prose.
       const askBackend =
@@ -153,8 +149,8 @@ async function main(): Promise<void> {
       const instance = render(
         <GenerateApp
           askBackend={askBackend}
+          askScope={askScope}
           invokedFrom={invokedFrom}
-          scopeApps={scopeApps}
           mode={command.kind}
           onEnrichChosen={() => {
             enrichAfter = true;
@@ -389,27 +385,6 @@ function insecureDirsHint(): string {
     ],
     "that command removes group/other write access from zsh's completion folders",
   );
-}
-
-/**
- * Normalize a user-supplied --scope value to a repo-relative posix path.
- * "" means whole repository (clears a saved scope); null means rejected.
- */
-function normalizeScope(input: string): string | null {
-  const cleaned = input
-    .replace(/\\/g, "/")
-    .replace(/^\.\//, "")
-    .replace(/\/+$/, "");
-  if (cleaned === "" || cleaned === ".") {
-    return "";
-  }
-  if (
-    path.isAbsolute(cleaned) ||
-    cleaned.split("/").some((segment) => segment === "..")
-  ) {
-    return null;
-  }
-  return cleaned;
 }
 
 async function confirm(prompt: string): Promise<boolean> {

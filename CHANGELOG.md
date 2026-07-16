@@ -2,6 +2,16 @@
 
 All notable changes to `@julianoczkowski/agentwiki` are documented here.
 
+## 1.2.0 — 2026-07-16
+
+### Manual scope selection — no more app-list guessing
+
+Feedback from a 68-project NX monorepo: auto-detected app lists kept being *almost* right. Replaced with an explicit choice.
+
+- **The picker is now three options** — "This folder: <where you ran init>/" (pre-selected), "The whole repository", or "Type a folder path…" (free-text with validation: must be a real folder inside the repo, no `..`/absolute paths). Workspace detection is only used as a silent yes/no signal for *whether* to ask; it never lists anything. Single-project repos still skip the question entirely.
+- **Scope banner on every page** — scoped wikis stamp `> Monorepo scope: all file paths on this page are relative to \`<scope>/\`` on every generated page, so a module page read in isolation can't be mistaken for repo-root code.
+- **Full component inventories** — module pages listed only the first 30 files (a ~940-file components module showed "…905 more files"). Now all files are listed (sanity ceiling 2,000), and the module-page cap rises from 24 to 48.
+
 ## 1.1.3 — 2026-07-16
 
 ### "This folder" — the foolproof scope (and more detection fixes)

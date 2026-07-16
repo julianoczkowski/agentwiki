@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Text, useApp } from "ink";
+import { Box, Text, useApp, useInput } from "ink";
+import { stat as fsStat } from "node:fs/promises";
+import path from "node:path";
 import { WIKI_DIR } from "../constants.js";
 import {
   detectBackends,
@@ -8,8 +10,12 @@ import {
 } from "../backends/index.js";
 import type { BackendId } from "../backends/types.js";
 import { HELP_EXAMPLES, HELP_GROUPS, HELP_INTRO } from "../commands.js";
-import { patchMeta, readMeta, saveBackendPreference } from "../engine/wiki.js";
-import { matchAppForPath, type WorkspaceApp } from "../engine/workspaces.js";
+import {
+  normalizeScope,
+  patchMeta,
+  readMeta,
+  saveBackendPreference,
+} from "../engine/wiki.js";
 import {
   gatherStatus,
   runDoctor,
@@ -93,102 +99,171 @@ function BackendPicker({
 }
 
 /**
- * Monorepo-only first step of init: pick which app the wiki documents.
- * Applications are shown first; shared packages/libraries stay behind a
- * "Something else…" expander so a 2-app repo shows exactly 2 apps. The
- * answer is saved to the wiki metadata; update/hooks never re-ask.
+ * Monorepo-only first step of init: pick what the wiki documents. No
+ * auto-detected app list — detection heuristics guess wrong in big repos,
+ * so the choice is manual: the folder you ran init from (pre-selected),
+ * the whole repository, or a typed path. The answer is saved to the wiki
+ * metadata; update/hooks never re-ask.
  */
 function ScopePicker({
-  apps,
   invokedFrom = "",
   onDone,
   root,
 }: {
-  apps: WorkspaceApp[];
   invokedFrom?: string;
   onDone: () => void;
   root: string;
 }) {
-  // Standing inside an app when running init is a strong hint — pre-select it.
-  const suggested = matchAppForPath(apps, invokedFrom);
-  // Standing in a folder detection did NOT recognize is a stronger hint
-  // still: offer it directly, so no app can ever be out of reach.
-  const hereDir = invokedFrom && !suggested ? invokedFrom : null;
-  const [showAll, setShowAll] = useState(suggested?.kind === "package");
-  const applications = apps.filter((app) => app.kind === "app");
-  const packages = apps.filter((app) => app.kind === "package");
-  // No recognizable apps (or user expanded): offer every workspace member.
-  const listed =
-    showAll || applications.length === 0 ? [...applications, ...packages] : applications;
-  const expandable = !showAll && applications.length > 0 && packages.length > 0;
-  const listedOffset = hereDir ? 2 : 1;
-  const suggestedIndex = suggested ? listed.indexOf(suggested) : -1;
+  const [typing, setTyping] = useState(false);
 
   const options = [
-    {
-      label: "The whole repository",
-      detail: "one wiki covering everything at once",
-    },
-    ...(hereDir
+    ...(invokedFrom
       ? [
           {
-            label: `This folder: ${hereDir}/`,
+            label: `This folder: ${invokedFrom}/`,
             detail: "where you ran init from",
           },
         ]
       : []),
-    ...listed.map((app) => ({
-      label: `${app.dir}/`,
-      detail: `${
-        app.kind === "package"
-          ? `${app.name ?? "detected"} — shared package`
-          : app.name ?? "detected app"
-      }${app === suggested ? " — you ran init from here" : ""}`,
-    })),
-    ...(expandable
-      ? [
-          {
-            label: "Something else…",
-            detail: `show ${packages.length} shared package${packages.length === 1 ? "" : "s"}/libraries too`,
-          },
-        ]
-      : []),
+    {
+      label: "The whole repository",
+      detail: "one wiki covering everything at once",
+    },
+    {
+      label: "Type a folder path…",
+      detail: "e.g. clients/apps/my-app",
+    },
   ];
+
+  if (typing) {
+    return (
+      <PathPrompt
+        onBack={() => setTyping(false)}
+        onDone={onDone}
+        root={root}
+      />
+    );
+  }
 
   return (
     <Section
-      title="Which App Should the Wiki Document?"
+      title="What Should the Wiki Document?"
       footer="saved per project — change later with agentwiki init --scope <dir>"
     >
       <Line>
-        This looks like a monorepo
-        {applications.length > 0
-          ? ` with ${applications.length} app${applications.length === 1 ? "" : "s"}`
-          : ` with ${apps.length} workspace members`}
-        . AgentWiki can document
+        This repository contains multiple apps/packages. AgentWiki can
       </Line>
       <Line>
-        one of them in depth, or the whole repository at once.
+        document one folder in depth, or the whole repository at once.
       </Line>
+      {!invokedFrom ? (
+        <Line>
+          <Text color="white">
+            Tip: run init from inside an app&apos;s folder to target it in one
+            keypress.
+          </Text>
+        </Line>
+      ) : null}
       <Select
-        initialIndex={
-          hereDir ? 1 : suggestedIndex >= 0 ? suggestedIndex + listedOffset : 0
-        }
         options={options}
         onSelect={(index) => {
-          if (expandable && index === options.length - 1) {
-            setShowAll(true);
+          const label = options[index].label;
+          if (label.startsWith("Type")) {
+            setTyping(true);
             return;
           }
           // "" records "whole repository" as an explicit answer so the
           // question is never asked again for this project.
-          const scope =
-            hereDir && index === 1
-              ? hereDir
-              : (listed[index - listedOffset]?.dir ?? "");
+          const scope = label.startsWith("This folder") ? invokedFrom : "";
           void patchMeta(root, { scope }).then(onDone);
         }}
       />
+    </Section>
+  );
+}
+
+/** Free-text folder entry for the scope picker, validated against the repo. */
+function PathPrompt({
+  onBack,
+  onDone,
+  root,
+}: {
+  onBack: () => void;
+  onDone: () => void;
+  root: string;
+}) {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useInput((input, key) => {
+    if (key.escape) {
+      onBack();
+      return;
+    }
+    if (key.return) {
+      const scope = normalizeScope(value);
+      if (scope === null) {
+        setError("Use a folder inside this repository (no .. or absolute paths).");
+        return;
+      }
+      if (scope === "") {
+        void patchMeta(root, { scope: "" }).then(onDone);
+        return;
+      }
+      void fsStat(path.join(root, scope))
+        .then((stat) => {
+          if (stat.isDirectory()) {
+            void patchMeta(root, { scope }).then(onDone);
+          } else {
+            setError(`"${scope}" is a file, not a folder.`);
+          }
+        })
+        .catch(() => {
+          setError(`"${scope}" is not a folder in this repository.`);
+        });
+      return;
+    }
+    if (key.backspace || key.delete) {
+      setError(null);
+      setValue((current) => current.slice(0, -1));
+      return;
+    }
+    if (input && !key.ctrl && !key.meta) {
+      setError(null);
+      // Batched/pasted input can embed raw backspaces (\x7f) and other
+      // control chars — apply deletions and keep only printable chars.
+      setValue((current) => {
+        let next = current;
+        for (const char of input) {
+          if (char === "\u007F" || char === "\b") {
+            next = next.slice(0, -1);
+          } else if (char >= " ") {
+            next += char;
+          }
+        }
+        return next;
+      });
+    }
+  });
+
+  return (
+    <Section
+      title="Type the Folder to Document"
+      footer="Enter: confirm · Esc: back to the choices"
+    >
+      <Line>
+        Relative to the repo root — for example{" "}
+        <Text color={ACCENT}>clients/apps/my-app</Text>
+      </Line>
+      <Item glyph={<Text color={ACCENT}>❯</Text>}>
+        <Text>{value}</Text>
+        <Text color={ACCENT}>█</Text>
+      </Item>
+      {error ? (
+        <Item glyph={<Text color="red">✖</Text>}>
+          <Text color="red">{error}</Text>
+        </Item>
+      ) : null}
     </Section>
   );
 }
@@ -213,21 +288,21 @@ export function GenerateApp({
   mode,
   root,
   askBackend = false,
+  askScope = false,
   invokedFrom = "",
-  scopeApps = [],
   onEnrichChosen,
 }: {
   mode: GenerateMode;
   root: string;
   askBackend?: boolean;
+  askScope?: boolean;
   invokedFrom?: string;
-  scopeApps?: WorkspaceApp[];
   onEnrichChosen?: () => void;
 }) {
   const app = useApp();
   const startedRef = useRef(false);
   const [stage, setStage] = useState<"scope" | "pick" | "run">(
-    scopeApps.length > 0 ? "scope" : askBackend ? "pick" : "run",
+    askScope ? "scope" : askBackend ? "pick" : "run",
   );
   const [detected, setDetected] = useState<DetectedBackend[] | null>(null);
   const [phases, setPhases] = useState(
@@ -298,7 +373,6 @@ export function GenerateApp({
       <Box flexDirection="column">
         <Logo />
         <ScopePicker
-          apps={scopeApps}
           invokedFrom={invokedFrom}
           onDone={() => setStage(askBackend ? "pick" : "run")}
           root={root}
