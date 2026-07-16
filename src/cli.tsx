@@ -9,6 +9,10 @@ import { HELP_TEXT, parseArgs } from "./commands.js";
 import { VERSION, WIKI_DIR, WORKFLOW_PATH } from "./constants.js";
 import { buildEnrichPrompt, scanQueue } from "./engine/queue.js";
 import {
+  detectWorkspaceApps,
+  type WorkspaceApp,
+} from "./engine/workspaces.js";
+import {
   patchMeta,
   readMeta,
   saveBackendPreference,
@@ -66,7 +70,35 @@ async function main(): Promise<void> {
         return;
       }
 
-      const meta = await readMeta(root);
+      let meta = await readMeta(root);
+
+      // Explicit monorepo scope: validate, save, skip the interactive question.
+      if (command.kind === "init" && command.scope !== null) {
+        const scope = normalizeScope(command.scope);
+        if (scope === null) {
+          process.stderr.write(
+            `error: --scope must be a directory inside this repository (got "${command.scope}").\n`,
+          );
+          process.exitCode = 2;
+          return;
+        }
+        if (scope !== "") {
+          const isDir = await fs
+            .stat(path.join(root, scope))
+            .then((stat) => stat.isDirectory())
+            .catch(() => false);
+          if (!isDir) {
+            process.stderr.write(
+              `error: --scope "${scope}" is not a directory in ${root}.\n`,
+            );
+            process.exitCode = 2;
+            return;
+          }
+        }
+        await patchMeta(root, { scope });
+        meta = await readMeta(root);
+      }
+
       if (meta?.paused) {
         if (command.kind === "update") {
           // No-op so stray hooks/CI can't churn a paused setup.
@@ -80,7 +112,20 @@ async function main(): Promise<void> {
         await patchMeta(root, { paused: false });
       }
 
-      // First step of an interactive init: pick which agent writes the prose.
+      // Very first step of a brand-new interactive init: in a monorepo, ask
+      // which app the wiki should document. Never asked again once meta
+      // exists — `update` and hooks must stay prompt-free.
+      const detectedApps =
+        command.kind === "init" &&
+        command.scope === null &&
+        Boolean(process.stdin.isTTY) &&
+        meta === null
+          ? await detectWorkspaceApps(root)
+          : [];
+      const scopeApps: WorkspaceApp[] =
+        detectedApps.length >= 2 ? detectedApps : [];
+
+      // Next step of an interactive init: pick which agent writes the prose.
       const askBackend =
         command.kind === "init" &&
         Boolean(process.stdin.isTTY) &&
@@ -92,6 +137,7 @@ async function main(): Promise<void> {
       const instance = render(
         <GenerateApp
           askBackend={askBackend}
+          scopeApps={scopeApps}
           mode={command.kind}
           onEnrichChosen={() => {
             enrichAfter = true;
@@ -328,6 +374,27 @@ function insecureDirsHint(): string {
   );
 }
 
+/**
+ * Normalize a user-supplied --scope value to a repo-relative posix path.
+ * "" means whole repository (clears a saved scope); null means rejected.
+ */
+function normalizeScope(input: string): string | null {
+  const cleaned = input
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/\/+$/, "");
+  if (cleaned === "" || cleaned === ".") {
+    return "";
+  }
+  if (
+    path.isAbsolute(cleaned) ||
+    cleaned.split("/").some((segment) => segment === "..")
+  ) {
+    return null;
+  }
+  return cleaned;
+}
+
 async function confirm(prompt: string): Promise<boolean> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -521,7 +588,8 @@ async function runEnrich(
     return;
   }
 
-  const prompt = buildEnrichPrompt(items);
+  const meta = await readMeta(root);
+  const prompt = buildEnrichPrompt(items, meta?.scope);
 
   if (dryRun) {
     process.stdout.write(
@@ -529,8 +597,6 @@ async function runEnrich(
     );
     return;
   }
-
-  const meta = await readMeta(root);
   const { choice, all } = await pickBackend(explicit, meta?.backend);
 
   if (!choice) {

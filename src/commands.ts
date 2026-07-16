@@ -3,7 +3,7 @@ import { isBackendId } from "./backends/index.js";
 import { VERSION } from "./constants.js";
 
 export type Command =
-  | { kind: "init" }
+  | { kind: "init"; scope: string | null }
   | { kind: "update" }
   | { kind: "status" }
   | { kind: "doctor" }
@@ -36,8 +36,22 @@ export function parseArgs(argv: string[]): Command {
   }
 
   switch (first) {
-    case "init":
-      return { kind: "init" };
+    case "init": {
+      let scope: string | null = null;
+      const flagIndex = rest.indexOf("--scope");
+      if (flagIndex !== -1) {
+        const value = rest[flagIndex + 1];
+        if (!value || value.startsWith("-")) {
+          return {
+            kind: "error",
+            message:
+              "--scope requires a directory, e.g. --scope apps/web (use --scope . for the whole repo)",
+          };
+        }
+        scope = value;
+      }
+      return { kind: "init", scope };
+    }
     case "update":
       return { kind: "update" };
     case "status":
@@ -113,6 +127,7 @@ export const HELP_GROUPS: HelpGroup[] = [
     title: "Create & Maintain",
     rows: [
       { command: "init", description: "Generate the wiki and wire agent integrations" },
+      { command: "  --scope <dir>", description: "Monorepo: document one app (`.` = whole repo)" },
       { command: "update", description: "Refresh fact blocks; flag prose whose facts changed" },
       { command: "status", description: "Wiki freshness per page/slot + backend readiness" },
       { command: "queue [--json]", description: "List prose slots that need writing" },

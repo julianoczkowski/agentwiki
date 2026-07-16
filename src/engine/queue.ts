@@ -112,7 +112,7 @@ export async function scanQueue(root: string): Promise<QueueItem[]> {
   return items;
 }
 
-export function buildEnrichPrompt(items: QueueItem[]): string {
+export function buildEnrichPrompt(items: QueueItem[], scope?: string): string {
   const list = items
     .map(
       (item) =>
@@ -120,9 +120,13 @@ export function buildEnrichPrompt(items: QueueItem[]): string {
     )
     .join("\n");
 
+  const scopeNote = scope
+    ? `\n\nThis is a monorepo and the wiki documents ONLY the \`${scope}/\` directory — explore and describe that app, not the rest of the repository. File paths in fact blocks are relative to \`${scope}/\`.`
+    : "";
+
   return `You are maintaining this repository's agentwiki — a documentation wiki where machine-generated fact blocks are combined with agent-written prose.
 
-Read ${WIKI_DIR}/quickstart.md first for context, then write the following prose slots. Explore the codebase as needed to write accurately; never invent behavior.
+Read ${WIKI_DIR}/quickstart.md first for context, then write the following prose slots. Explore the codebase as needed to write accurately; never invent behavior.${scopeNote}
 
 Prose slots to write:
 ${list}

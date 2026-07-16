@@ -13,6 +13,8 @@ export interface WikiMeta {
   pages: number;
   backend?: "cursor" | "claude";
   paused?: boolean;
+  /** Monorepo scope: repo-relative dir the wiki documents (absent = whole repo). */
+  scope?: string;
 }
 
 export interface PageResult {
@@ -55,7 +57,7 @@ export async function readMeta(root: string): Promise<WikiMeta | null> {
 
 export async function patchMeta(
   root: string,
-  patch: Partial<Pick<WikiMeta, "backend" | "paused">>,
+  patch: Partial<Pick<WikiMeta, "backend" | "paused" | "scope">>,
 ): Promise<void> {
   const meta = (await readMeta(root)) ?? {
     version: VERSION,
@@ -68,6 +70,9 @@ export async function patchMeta(
   Object.assign(meta, patch);
   if (patch.paused === false) {
     delete meta.paused;
+  }
+  if (patch.scope === "") {
+    delete meta.scope;
   }
 
   await fs.mkdir(wikiDir(root), { recursive: true });
@@ -187,6 +192,7 @@ export async function writeWiki(
       gitHead,
       pages: templates.length,
       ...(previous?.backend ? { backend: previous.backend } : {}),
+      ...(previous?.scope ? { scope: previous.scope } : {}),
     };
     await fs.writeFile(
       path.join(dir, META_FILE),

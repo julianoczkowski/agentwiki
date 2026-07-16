@@ -48,6 +48,8 @@ export interface GenerateSummary {
   gitHead: string | null;
   workflowPresent: boolean;
   preferredBackend: "cursor" | "claude" | null;
+  /** Monorepo scope the wiki is limited to ("" = whole repo). */
+  scope: string;
 }
 
 export const GENERATE_PHASES = [
@@ -65,6 +67,10 @@ export async function runGenerate(
   mode: "init" | "update",
   emitPhase: EmitPhase,
 ): Promise<GenerateSummary> {
+  // Monorepo scope is a saved per-project choice (init asks once); update
+  // must honor it silently so hooks and CI stay prompt-free.
+  const scope = (await readMeta(root))?.scope ?? "";
+
   // Integrations are written BEFORE the scan so the files they create are
   // counted from the very first run — otherwise the first update after init
   // sees a different file count and needlessly stales prose.
@@ -94,18 +100,18 @@ export async function runGenerate(
   });
 
   emitPhase({ id: "scan", status: "running" });
-  const scan = await scanRepository(root);
+  const scan = await scanRepository(root, scope);
   emitPhase({
     id: "scan",
     status: "done",
-    detail: `${scan.totalFiles} files, ${scan.languages
+    detail: `${scope ? `${scope}/ — ` : ""}${scan.totalFiles} files, ${scan.languages
       .slice(0, 3)
       .map((language) => language.name)
       .join("/")}`,
   });
 
   emitPhase({ id: "git", status: "running" });
-  const git = await collectGitFacts(root);
+  const git = await collectGitFacts(root, scope);
   emitPhase({
     id: "git",
     status: git ? "done" : "warn",
@@ -115,7 +121,7 @@ export async function runGenerate(
   });
 
   emitPhase({ id: "symbols", status: "running" });
-  const symbols = await extractSymbols(root, scan.codeFiles);
+  const symbols = await extractSymbols(scan.root, scan.codeFiles);
   emitPhase({
     id: "symbols",
     status: "done",
@@ -164,6 +170,7 @@ export async function runGenerate(
 
   return {
     preferredBackend: finalMeta?.backend ?? null,
+    scope,
     mode,
     write,
     integrations,
@@ -256,7 +263,7 @@ export async function runDoctor(root: string): Promise<DoctorCheck[]> {
     label: "Wiki",
     status: initialized ? (meta?.paused ? "warn" : "ok") : "warn",
     detail: initialized
-      ? `${meta?.paused ? "PAUSED, " : ""}initialized${meta ? `, last update ${meta.updatedAt} (${meta.command})` : ""}${meta?.backend ? `, preferred backend: ${meta.backend}` : ""}`
+      ? `${meta?.paused ? "PAUSED, " : ""}initialized${meta ? `, last update ${meta.updatedAt} (${meta.command})` : ""}${meta?.backend ? `, preferred backend: ${meta.backend}` : ""}${meta?.scope ? `, scope: ${meta.scope}/` : ""}`
       : "not initialized",
     hints: initialized
       ? meta?.paused

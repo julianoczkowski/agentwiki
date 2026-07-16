@@ -17,7 +17,10 @@ src/
 ├── constants.ts         WIKI_DIR ("agentwiki"), ignored dirs, language map
 ├── runner.ts            Orchestration: runGenerate (7 phases), runDoctor, gatherStatus
 ├── engine/
-│   ├── scan.ts          File listing (git ls-files, fs fallback), manifests, entrypoints
+│   ├── scan.ts          File listing (git ls-files, fs fallback), manifests, entrypoints;
+│   │                    optional monorepo scope roots the scan at one app dir
+│   ├── workspaces.ts    Monorepo app detection (workspace globs + manifest sweep)
+│   │                    for init's "which app?" question; choice saved as meta.scope
 │   ├── symbols.ts       Regex-based export/import extraction (TS/JS, Python, Go, Rust)
 │   ├── graph.ts         Module dependency graph + Mermaid rendering
 │   ├── git.ts           simple-git: head, hot files, contributors (90-day window)

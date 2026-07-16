@@ -21,8 +21,11 @@ export interface ManifestInfo {
 }
 
 export interface ScanResult {
+  /** Absolute path actually scanned — the scoped app dir in a monorepo. */
   root: string;
-  /** All tracked/visible files, repo-relative with forward slashes. */
+  /** Monorepo scope the scan was limited to ("" = whole repo). */
+  scope: string;
+  /** All tracked/visible files, relative to `root` with forward slashes. */
   files: string[];
   codeFiles: string[];
   totalFiles: number;
@@ -36,7 +39,13 @@ export interface ScanResult {
   sourceRoot: string;
 }
 
-export async function scanRepository(root: string): Promise<ScanResult> {
+export async function scanRepository(
+  repoRoot: string,
+  scope = "",
+): Promise<ScanResult> {
+  // In a monorepo the scan is rooted at the chosen app dir; `git ls-files`
+  // run from a subdirectory already lists only that subtree, cwd-relative.
+  const root = scope ? path.join(repoRoot, scope) : repoRoot;
   const files = (await listFiles(root)).filter((file) => {
     const top = file.includes("/") ? file.slice(0, file.indexOf("/")) : file;
     return top !== WIKI_DIR && !IGNORED_DIRS.has(top);
@@ -68,6 +77,7 @@ export async function scanRepository(root: string): Promise<ScanResult> {
 
   return {
     root,
+    scope,
     files,
     codeFiles,
     totalFiles: files.length,

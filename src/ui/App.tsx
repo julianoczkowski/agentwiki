@@ -8,7 +8,8 @@ import {
 } from "../backends/index.js";
 import type { BackendId } from "../backends/types.js";
 import { HELP_EXAMPLES, HELP_GROUPS, HELP_INTRO } from "../commands.js";
-import { readMeta, saveBackendPreference } from "../engine/wiki.js";
+import { patchMeta, readMeta, saveBackendPreference } from "../engine/wiki.js";
+import type { WorkspaceApp } from "../engine/workspaces.js";
 import {
   gatherStatus,
   runDoctor,
@@ -91,6 +92,85 @@ function BackendPicker({
   );
 }
 
+/**
+ * Monorepo-only first step of init: pick which app the wiki documents.
+ * Applications are shown first; shared packages/libraries stay behind a
+ * "Something else…" expander so a 2-app repo shows exactly 2 apps. The
+ * answer is saved to the wiki metadata; update/hooks never re-ask.
+ */
+function ScopePicker({
+  apps,
+  onDone,
+  root,
+}: {
+  apps: WorkspaceApp[];
+  onDone: () => void;
+  root: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const applications = apps.filter((app) => app.kind === "app");
+  const packages = apps.filter((app) => app.kind === "package");
+  // No recognizable apps (or user expanded): offer every workspace member.
+  const listed =
+    showAll || applications.length === 0 ? [...applications, ...packages] : applications;
+  const expandable = !showAll && applications.length > 0 && packages.length > 0;
+
+  const options = [
+    {
+      label: "The whole repository",
+      detail: "one wiki covering everything at once",
+    },
+    ...listed.map((app) => ({
+      label: `${app.dir}/`,
+      detail:
+        app.kind === "package"
+          ? `${app.name ?? "detected"} — shared package`
+          : app.name ?? "detected app",
+    })),
+    ...(expandable
+      ? [
+          {
+            label: "Something else…",
+            detail: `show ${packages.length} shared package${packages.length === 1 ? "" : "s"}/libraries too`,
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <Section
+      title="Which App Should the Wiki Document?"
+      footer="saved per project — change later with agentwiki init --scope <dir>"
+    >
+      <Line>
+        This looks like a monorepo
+        {applications.length > 0
+          ? ` with ${applications.length} app${applications.length === 1 ? "" : "s"}`
+          : ` with ${apps.length} workspace members`}
+        . AgentWiki can document
+      </Line>
+      <Line>
+        one of them in depth, or the whole repository at once.
+      </Line>
+      <Select
+        options={options}
+        onSelect={(index) => {
+          if (expandable && index === options.length - 1) {
+            setShowAll(true);
+            return;
+          }
+          const app = index > 0 ? listed[index - 1] : null;
+          if (app) {
+            void patchMeta(root, { scope: app.dir }).then(onDone);
+          } else {
+            onDone();
+          }
+        }}
+      />
+    </Section>
+  );
+}
+
 /** The backend enrich would use right now, honoring a saved preference. */
 function readyBackendFor(summary: GenerateSummary): DetectedBackend | null {
   const relevant = summary.preferredBackend
@@ -111,17 +191,19 @@ export function GenerateApp({
   mode,
   root,
   askBackend = false,
+  scopeApps = [],
   onEnrichChosen,
 }: {
   mode: GenerateMode;
   root: string;
   askBackend?: boolean;
+  scopeApps?: WorkspaceApp[];
   onEnrichChosen?: () => void;
 }) {
   const app = useApp();
   const startedRef = useRef(false);
-  const [stage, setStage] = useState<"pick" | "run">(
-    askBackend ? "pick" : "run",
+  const [stage, setStage] = useState<"scope" | "pick" | "run">(
+    scopeApps.length > 0 ? "scope" : askBackend ? "pick" : "run",
   );
   const [detected, setDetected] = useState<DetectedBackend[] | null>(null);
   const [phases, setPhases] = useState(
@@ -186,6 +268,19 @@ export function GenerateApp({
   }, [app, mode, onEnrichChosen, root, stage]);
 
   const running = summary === null && error === null;
+
+  if (stage === "scope") {
+    return (
+      <Box flexDirection="column">
+        <Logo />
+        <ScopePicker
+          apps={scopeApps}
+          onDone={() => setStage(askBackend ? "pick" : "run")}
+          root={root}
+        />
+      </Box>
+    );
+  }
 
   if (stage === "pick") {
     return (
@@ -311,7 +406,9 @@ function GenerateSummaryView({
         <Item glyph={<StatusGlyph status="done" />}>
           {created} pages created, {updated} updated, {removed} removed{" "}
           <Text color="white">
-            ({summary.totalFiles} files scanned, {summary.modules} modules)
+            ({summary.totalFiles} files scanned
+            {summary.scope ? ` in ${summary.scope}/` : ""}, {summary.modules}{" "}
+            modules)
           </Text>
         </Item>
         <Item
@@ -730,6 +827,7 @@ export function StatusApp({ root }: { root: string }) {
               last {report.meta.command} {report.meta.updatedAt}
               {report.meta.gitHead ? ` at ${report.meta.gitHead}` : ""}
               {report.meta.backend ? ` · backend: ${report.meta.backend}` : ""}
+              {report.meta.scope ? ` · scope: ${report.meta.scope}/` : ""}
             </Text>
           </Line>
         ) : null}

@@ -12,8 +12,13 @@ export interface GitFacts {
 
 const RECENT_WINDOW = "90 days ago";
 
-export async function collectGitFacts(root: string): Promise<GitFacts | null> {
+export async function collectGitFacts(
+  root: string,
+  scope = "",
+): Promise<GitFacts | null> {
   const git = simpleGit(root);
+  // In a scoped (monorepo) wiki, only commits touching the app matter.
+  const pathspec = scope ? ["--", scope] : [];
 
   try {
     if (!(await git.checkIsRepo())) {
@@ -30,6 +35,7 @@ export async function collectGitFacts(root: string): Promise<GitFacts | null> {
     const log = await git.log([
       `--since=${RECENT_WINDOW}`,
       "--max-count=500",
+      ...pathspec,
     ]);
 
     const contributors = new Set(
@@ -54,15 +60,23 @@ export async function collectGitFacts(root: string): Promise<GitFacts | null> {
       "--max-count=500",
       "--name-only",
       "--pretty=format:%h",
+      ...pathspec,
     ]);
 
+    // Hot-file paths are made scope-relative so they line up with the
+    // (scope-rooted) scan and module file lists.
+    const prefix = scope ? `${scope}/` : "";
     const fileCounts = new Map<string, number>();
     for (const line of nameOnly.split("\n")) {
       const trimmed = line.trim();
       if (trimmed.length === 0 || /^[0-9a-f]{7,}$/.test(trimmed)) {
         continue;
       }
-      fileCounts.set(trimmed, (fileCounts.get(trimmed) ?? 0) + 1);
+      if (prefix && !trimmed.startsWith(prefix)) {
+        continue;
+      }
+      const file = trimmed.slice(prefix.length);
+      fileCounts.set(file, (fileCounts.get(file) ?? 0) + 1);
     }
 
     return {

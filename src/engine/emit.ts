@@ -76,8 +76,15 @@ function buildQuickstart(
   const name = projectName(scan);
   const manifest = scan.manifests[0] ?? null;
 
+  // The wiki lives at the repo root even when scoped to one monorepo app,
+  // so links out of the wiki need the scope prefix.
+  const sourcePrefix = scan.scope ? `../${scan.scope}/` : "../";
+
   const identity = [
     `- **Project:** ${name}`,
+    scan.scope
+      ? `- **Monorepo scope:** \`${scan.scope}/\` — this wiki documents only that app; file paths below are relative to it`
+      : null,
     manifest?.description ? `- **Description:** ${manifest.description}` : null,
     `- **Languages:** ${
       scan.languages
@@ -89,7 +96,7 @@ function buildQuickstart(
     scan.readmes.length > 0
       ? `- **Existing docs:** ${scan.readmes
           .slice(0, 5)
-          .map((readme) => `[${readme}](../${readme})`)
+          .map((readme) => `[${readme}](${sourcePrefix}${readme})`)
           .join(", ")}`
       : null,
   ]

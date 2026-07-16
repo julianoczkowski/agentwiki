@@ -24,9 +24,10 @@ AgentWiki generates and maintains a documentation wiki (`agentwiki/` in your rep
 
 `init` walks you through everything interactively:
 
-1. **Pick your prose writer** — arrow-key select between Cursor CLI and Claude Code, with live readiness shown for each (installed? signed in?). If a tool is missing or logged out, you get numbered *type-this-in-your-terminal* steps, written for non-developers.
-2. **Watch the wiki generate** — scan, git mining, symbol extraction, module graph, page generation, integration wiring, each with live progress.
-3. **"Write the Prose Now?"** — if your agent is ready, press Enter and it writes every section in the same run, with a live spinner and elapsed time. A few minutes later: *"all N slots written — wiki is fully fresh."*
+1. **Monorepo? Pick your app** — when the repo contains multiple apps/packages (npm/pnpm workspaces, NX — including custom `workspaceLayout` dirs like `clients/apps` and `project.json`-only apps, `apps/*`-style layouts, nested Go/Rust/Python manifests), an arrow-key select asks which app the wiki should document — one app in depth, or the whole repository. Only *applications* are listed; shared packages/libraries sit behind a "Something else…" option so the list stays clean. The choice is saved, and every later `update` (hooks, CI) honors it silently. Single-project repos never see this question. Change it any time with `agentwiki init --scope <dir>` (`--scope .` = whole repo).
+2. **Pick your prose writer** — arrow-key select between Cursor CLI and Claude Code, with live readiness shown for each (installed? signed in?). If a tool is missing or logged out, you get numbered *type-this-in-your-terminal* steps, written for non-developers.
+3. **Watch the wiki generate** — scan, git mining, symbol extraction, module graph, page generation, integration wiring, each with live progress.
+4. **"Write the Prose Now?"** — if your agent is ready, press Enter and it writes every section in the same run, with a live spinner and elapsed time. A few minutes later: *"all N slots written — wiki is fully fresh."*
 
 Most users never need a second command. Everything below is automation or power-user territory.
 
@@ -45,6 +46,27 @@ https://github.com/user-attachments/assets/fe1411e3-8772-4080-834f-f3cc83f4be2f
 | `.cursor/hooks.json` | `stop` hook: refresh facts after each Cursor agent session (runs via npx — no global install needed; your other hooks are preserved) |
 | `AGENTS.md` + `CLAUDE.md` | Pointer sections for coding agents — both files always ensured, existing content never overwritten |
 | `.github/workflows/agentwiki.yml` | CI automation (see below) |
+
+## Monorepos
+
+Point the wiki at one app instead of the whole repo. On a fresh `init` in a monorepo, AgentWiki detects your applications and asks which one to document:
+
+```
+┌ Which App Should the Wiki Document?
+│
+│ This looks like a monorepo with 2 apps. AgentWiki can document
+│ one of them in depth, or the whole repository at once.
+│
+● The whole repository (one wiki covering everything at once)
+○ apps/admin/ (@repo/admin)
+○ apps/web/ (@repo/web)
+○ Something else… (show 2 shared packages/libraries too)
+```
+
+- **Detected layouts:** npm/pnpm workspaces, NX (custom `workspaceLayout` dirs like `clients/apps`, `project.json`-only apps), plain `apps/*` conventions, and nested Go/Rust/Python manifests up to three levels deep.
+- **Apps only, by default:** shared packages and libraries stay behind "Something else…" so the choice is obvious.
+- **Everything is scoped:** file scan, module graph, symbols, hot files, and recent commits cover only the chosen app; commits to other apps never touch your wiki's prose.
+- **Set it directly:** `agentwiki init --scope apps/web` (CI-friendly), `--scope .` to go back to whole-repo. The choice is saved in `agentwiki/.agentwiki.json` — hooks and CI honor it with zero prompts.
 
 ## How it stays current — the full lifecycle, hands-free
 
@@ -75,6 +97,7 @@ Without a secret, the enrichment steps skip themselves with a clear message. Bot
 
 ```
 agentwiki init                 The one command: generate, wire, offer prose
+        --scope <dir>              monorepo: document one app (`.` = whole repo)
 agentwiki update               Refresh fact blocks; flag prose whose facts changed
 agentwiki status               Freshness overview per page/slot + backend readiness
 agentwiki queue [--json]       List prose slots that need writing
@@ -126,7 +149,7 @@ npm test                  # vitest unit suite
 npm run build             # tsc -> dist/, then npm link for a global command
 ```
 
-Releases are automated via [npm Trusted Publishers (OIDC)](docs/npm-deployment.md): `npm version patch && git push --follow-tags` — no tokens anywhere.
+Releases are automated via [npm Trusted Publishers (OIDC)](docs/npm-deployment.md): `npm version patch && git push --follow-tags` — no tokens anywhere. See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ---
 ## Author
