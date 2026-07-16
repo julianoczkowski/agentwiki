@@ -98,7 +98,9 @@ Point the wiki at one app instead of the whole repo. On a fresh `init` in a mono
 - **Apps only, by default:** shared packages and libraries stay behind "Something else…" so the choice is obvious.
 - **Everything is scoped:** file scan, module graph, symbols, hot files, and recent commits cover only the chosen app; commits to other apps never touch your wiki's prose.
 - **Set it directly:** `agentwiki init --scope apps/web` (CI-friendly), `--scope .` to go back to whole-repo. The choice is saved in `agentwiki/.agentwiki.json` — hooks and CI honor it with zero prompts.
-- **Run it from anywhere:** every command anchors at the **git repo root**, no matter which subfolder you're standing in — the wiki, rules, hooks, and the GitHub workflow always land in one canonical place, exactly as in a single-project repo. Bonus: run `init` from inside an app's folder and that app comes pre-selected in the picker.
+- **Run it from anywhere:** every command anchors at the **git repo root**, no matter which subfolder you're standing in — the wiki, rules, hooks, and the GitHub workflow always land in one canonical place, exactly as in a single-project repo.
+- **The foolproof path — run `init` from inside your app's folder:** if it's a detected app it comes pre-selected; if detection didn't recognize it, the picker offers **"This folder"** pre-selected instead. Either way, one Enter scopes the wiki to the app you're standing in — detection is a convenience, never a gatekeeper.
+- **NX-aware:** the NX project graph cache is the source of truth where present (so even plugin-inferred apps with no manifest file are listed, labeled with their NX names); `*-e2e` and `*-integration-tests` projects are kept out of the app list.
 
 ## How it stays current — the full lifecycle, hands-free
 

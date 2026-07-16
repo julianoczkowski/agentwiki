@@ -252,6 +252,63 @@ describe("detectWorkspaceApps", () => {
     expect(apps.some((app) => app.dir.includes("react-hotkeys"))).toBe(false);
   });
 
+  it("treats a legacy app with leftover workspace files as an app, not a workspace", async () => {
+    const root = await makeRepo({
+      "clients/nx.json": JSON.stringify({}),
+      "clients/package.json": JSON.stringify({ name: "ws" }),
+      // tcweb shape: migrated-in legacy repo still carrying lerna.json and
+      // an old workspaces field — inside apps/, that's an app.
+      "clients/apps/tcweb/lerna.json": JSON.stringify({ version: "1.0.0" }),
+      "clients/apps/tcweb/package.json": JSON.stringify({
+        name: "tcweb",
+        workspaces: ["packages/*"],
+      }),
+      "clients/apps/viewer/project.json": JSON.stringify({
+        name: "viewer",
+        projectType: "application",
+      }),
+    });
+
+    const apps = await detectWorkspaceApps(root);
+
+    expect(apps.map((app) => `${app.dir}:${app.kind}`)).toEqual([
+      "clients/apps/tcweb:app",
+      "clients/apps/viewer:app",
+    ]);
+  });
+
+  it("demotes graph-typed apps living in libs/tools containers; reads hash-prefixed caches", async () => {
+    const root = await makeRepo({
+      "nx.json": JSON.stringify({}),
+      "package.json": JSON.stringify({ name: "ws" }),
+      ".nx/workspace-data/18274-project-graph.json": JSON.stringify({
+        graph: {
+          nodes: {
+            viewer: { type: "app", data: { root: "apps/viewer" } },
+            "tc-example": {
+              type: "app",
+              data: { root: "libs/shared/features/tc-thing/example" },
+            },
+            generators: { type: "app", data: { root: "tools/generators" } },
+          },
+        },
+      }),
+      "apps/viewer/src/main.ts": "export const x = 1;\n",
+      "libs/shared/features/tc-thing/example/src/main.ts": "export {};\n",
+      "tools/generators/package.json": JSON.stringify({
+        name: "@ws/generators",
+      }),
+    });
+
+    const apps = await detectWorkspaceApps(root);
+
+    expect(apps.map((app) => `${app.dir}:${app.kind}`)).toEqual([
+      "apps/viewer:app",
+      "libs/shared/features/tc-thing/example:package",
+      "tools/generators:package",
+    ]);
+  });
+
   it("demotes e2e and integration-test projects even when typed as applications", async () => {
     const root = await makeRepo({
       "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n',

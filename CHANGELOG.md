@@ -2,6 +2,15 @@
 
 All notable changes to `@julianoczkowski/agentwiki` are documented here.
 
+## 1.1.3 — 2026-07-16
+
+### "This folder" — the foolproof scope (and more detection fixes)
+
+- **Pick the folder you're standing in** — running an interactive `init` from inside any repo subfolder that detection didn't recognize adds a pre-selected **"This folder: <dir>/"** option to the picker. One Enter scopes the wiki to it (still created at the repo root). Detection is now a convenience, never a gatekeeper.
+- **Legacy apps with workspace leftovers** — an app folder inside `apps/` carrying a stale `lerna.json` or `workspaces` field (a repo migrated into the monorepo wholesale) was mistaken for a nested workspace and excluded; inside an apps container it now counts as an app.
+- **Graph-typed apps in libs/tools containers demoted** — NX "app" nodes living under `libs/` or `tools/` (example/demo apps, generators) no longer clutter the app list.
+- **Hash-prefixed NX cache files** — the project-graph cache is found by scanning the cache dirs, not by exact filename.
+
 ## 1.1.2 — 2026-07-16
 
 ### NX project graph as the source of truth (fix)

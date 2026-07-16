@@ -41,11 +41,11 @@ const APP_SEGMENTS = new Set(["apps", "applications", "services"]);
 /** Test-runner projects (foo-e2e, foo-integration-tests) are not documentation targets. */
 const TEST_APP_SUFFIX = /(^|[-_.])(e2e|integration-tests?)$/;
 
-/** NX project-graph caches, newest layout first. */
-const NX_GRAPH_CACHES = [
-  ".nx/workspace-data/project-graph.json",
-  ".nx/cache/project-graph.json",
-  "node_modules/.cache/nx/project-graph.json",
+/** Dirs where NX versions have kept their project-graph cache. */
+const NX_GRAPH_CACHE_DIRS = [
+  ".nx/workspace-data",
+  ".nx/cache",
+  "node_modules/.cache/nx",
 ];
 
 interface NxLayout {
@@ -177,12 +177,25 @@ export async function detectWorkspaceApps(root: string): Promise<WorkspaceApp[]>
 async function readNxGraphProjects(
   base: string,
 ): Promise<Map<string, { kind: "app" | "package"; name: string }>> {
-  for (const cache of NX_GRAPH_CACHES) {
+  // Filenames vary across NX versions (project-graph.json, hash-prefixed
+  // variants) — scan the known cache dirs for anything that looks right.
+  const candidates: string[] = [];
+  for (const dir of NX_GRAPH_CACHE_DIRS) {
+    try {
+      for (const entry of await fs.readdir(path.join(base, dir))) {
+        if (entry.includes("project-graph") && entry.endsWith(".json")) {
+          candidates.push(path.join(base, dir, entry));
+        }
+      }
+    } catch {
+      // Cache dir absent.
+    }
+  }
+
+  for (const cache of candidates) {
     let nodes: Record<string, { type?: unknown; data?: { root?: unknown } }>;
     try {
-      const parsed = JSON.parse(
-        await fs.readFile(path.join(base, cache), "utf8"),
-      ) as {
+      const parsed = JSON.parse(await fs.readFile(cache, "utf8")) as {
         graph?: { nodes?: typeof nodes };
         nodes?: typeof nodes;
       };
@@ -235,8 +248,15 @@ async function classify(
   }
 
   const fromGraph = graphKinds.get(dir);
-  if (fromGraph) {
-    return fromGraph;
+  if (fromGraph === "package") {
+    return "package";
+  }
+  if (fromGraph === "app") {
+    // Demo/example apps living inside libs/ or tools/ are support code,
+    // not products — the container placement outranks the NX node type.
+    return dir.split("/").some((segment) => PACKAGE_SEGMENTS.has(segment))
+      ? "package"
+      : "app";
   }
 
   try {
@@ -372,7 +392,14 @@ async function sweepForManifestDirs(
   for (const child of await listSubdirs(path.join(root, relative))) {
     const dir = relative ? `${relative}/${child}` : child;
     const absolute = path.join(root, dir);
-    if (await isWorkspaceRootDir(absolute)) {
+    // A workspace-config dir inside an apps/ container is a legacy app
+    // dragging its old monorepo files along (lerna.json, a stale
+    // workspaces field) — a member, not a workspace to recurse into.
+    const insideAppsContainer = dir
+      .split("/")
+      .slice(0, -1)
+      .some((segment) => APP_SEGMENTS.has(segment));
+    if (!insideAppsContainer && (await isWorkspaceRootDir(absolute))) {
       nestedRoots.push(dir);
       if (depth < SWEEP_DEPTH) {
         await sweepForManifestDirs(root, dir, depth + 1, dirs, nestedRoots);

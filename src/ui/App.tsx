@@ -111,6 +111,9 @@ function ScopePicker({
 }) {
   // Standing inside an app when running init is a strong hint — pre-select it.
   const suggested = matchAppForPath(apps, invokedFrom);
+  // Standing in a folder detection did NOT recognize is a stronger hint
+  // still: offer it directly, so no app can ever be out of reach.
+  const hereDir = invokedFrom && !suggested ? invokedFrom : null;
   const [showAll, setShowAll] = useState(suggested?.kind === "package");
   const applications = apps.filter((app) => app.kind === "app");
   const packages = apps.filter((app) => app.kind === "package");
@@ -118,6 +121,7 @@ function ScopePicker({
   const listed =
     showAll || applications.length === 0 ? [...applications, ...packages] : applications;
   const expandable = !showAll && applications.length > 0 && packages.length > 0;
+  const listedOffset = hereDir ? 2 : 1;
   const suggestedIndex = suggested ? listed.indexOf(suggested) : -1;
 
   const options = [
@@ -125,6 +129,14 @@ function ScopePicker({
       label: "The whole repository",
       detail: "one wiki covering everything at once",
     },
+    ...(hereDir
+      ? [
+          {
+            label: `This folder: ${hereDir}/`,
+            detail: "where you ran init from",
+          },
+        ]
+      : []),
     ...listed.map((app) => ({
       label: `${app.dir}/`,
       detail: `${
@@ -159,17 +171,22 @@ function ScopePicker({
         one of them in depth, or the whole repository at once.
       </Line>
       <Select
-        initialIndex={suggestedIndex >= 0 ? suggestedIndex + 1 : 0}
+        initialIndex={
+          hereDir ? 1 : suggestedIndex >= 0 ? suggestedIndex + listedOffset : 0
+        }
         options={options}
         onSelect={(index) => {
           if (expandable && index === options.length - 1) {
             setShowAll(true);
             return;
           }
-          const app = index > 0 ? listed[index - 1] : null;
           // "" records "whole repository" as an explicit answer so the
           // question is never asked again for this project.
-          void patchMeta(root, { scope: app ? app.dir : "" }).then(onDone);
+          const scope =
+            hereDir && index === 1
+              ? hereDir
+              : (listed[index - listedOffset]?.dir ?? "");
+          void patchMeta(root, { scope }).then(onDone);
         }}
       />
     </Section>
