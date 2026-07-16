@@ -145,6 +145,65 @@ describe("detectWorkspaceApps", () => {
     expect(apps[0]?.name).toBe("checkout");
   });
 
+  it("descends into a nested workspace root instead of listing it as an app", async () => {
+    // trimble-web-apps shape: the repo root has no workspace config at all;
+    // clients/ is the actual NX workspace with its own nx.json + package.json.
+    const root = await makeRepo({
+      "build/readme.txt": "build scripts",
+      "clients/nx.json": JSON.stringify({}),
+      "clients/package.json": JSON.stringify({ name: "clients-workspace" }),
+      "clients/apps/modus/project.json": JSON.stringify({
+        name: "modus",
+        projectType: "application",
+      }),
+      "clients/apps/field/project.json": JSON.stringify({
+        name: "field",
+        projectType: "application",
+      }),
+      "clients/libs/shared-ui/project.json": JSON.stringify({
+        name: "shared-ui",
+        projectType: "library",
+      }),
+      "clients/tools/generators/package.json": JSON.stringify({
+        name: "generators",
+      }),
+    });
+
+    const apps = await detectWorkspaceApps(root);
+
+    expect(apps.map((app) => `${app.dir}:${app.kind}`)).toEqual([
+      "clients/apps/field:app",
+      "clients/apps/modus:app",
+      "clients/libs/shared-ui:package",
+      "clients/tools/generators:package",
+    ]);
+    // The workspace container itself must never be offered as an app.
+    expect(apps.some((app) => app.dir === "clients")).toBe(false);
+  });
+
+  it("applies a nested workspace's own nx.json layout and workspace globs", async () => {
+    const root = await makeRepo({
+      "clients/nx.json": JSON.stringify({
+        workspaceLayout: { appsDir: "products", libsDir: "shared" },
+      }),
+      "clients/package.json": JSON.stringify({
+        name: "ws",
+        workspaces: ["products/*", "shared/*"],
+      }),
+      "clients/products/alpha/package.json": JSON.stringify({ name: "alpha" }),
+      "clients/products/beta/package.json": JSON.stringify({ name: "beta" }),
+      "clients/shared/kit/package.json": JSON.stringify({ name: "kit" }),
+    });
+
+    const apps = await detectWorkspaceApps(root);
+
+    expect(apps.map((app) => `${app.dir}:${app.kind}`)).toEqual([
+      "clients/products/alpha:app",
+      "clients/products/beta:app",
+      "clients/shared/kit:package",
+    ]);
+  });
+
   it("finds at most one app in a single-project repo", async () => {
     const root = await makeRepo({
       "package.json": JSON.stringify({ name: "single" }),

@@ -13,7 +13,11 @@ export interface WikiMeta {
   pages: number;
   backend?: "cursor" | "claude";
   paused?: boolean;
-  /** Monorepo scope: repo-relative dir the wiki documents (absent = whole repo). */
+  /**
+   * Monorepo scope: repo-relative dir the wiki documents. "" means the user
+   * explicitly chose the whole repository; absent means never asked — an
+   * interactive init in a monorepo re-asks until an answer is recorded.
+   */
   scope?: string;
 }
 
@@ -70,9 +74,6 @@ export async function patchMeta(
   Object.assign(meta, patch);
   if (patch.paused === false) {
     delete meta.paused;
-  }
-  if (patch.scope === "") {
-    delete meta.scope;
   }
 
   await fs.mkdir(wikiDir(root), { recursive: true });
@@ -192,7 +193,7 @@ export async function writeWiki(
       gitHead,
       pages: templates.length,
       ...(previous?.backend ? { backend: previous.backend } : {}),
-      ...(previous?.scope ? { scope: previous.scope } : {}),
+      ...(previous?.scope !== undefined ? { scope: previous.scope } : {}),
     };
     await fs.writeFile(
       path.join(dir, META_FILE),

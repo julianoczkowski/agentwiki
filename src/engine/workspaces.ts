@@ -19,7 +19,8 @@ const MANIFEST_FILES = [
   "Cargo.toml",
 ];
 const MAX_APPS = 24;
-const SWEEP_DEPTH = 3; // reaches NX-style clients/apps/<name>
+const SWEEP_DEPTH = 4; // reaches nested-workspace apps like clients/apps/<name>
+const MAX_NESTED_WORKSPACES = 8;
 
 /** Path segments that mark a workspace member as a shared package, not an app. */
 const PACKAGE_SEGMENTS = new Set([
@@ -69,32 +70,50 @@ export function matchAppForPath(
 
 /**
  * Find the apps/packages of a monorepo: workspace globs from package.json,
- * pnpm-workspace.yaml, and nx.json, plus a shallow filesystem sweep for
- * nested manifests (covers Go/Rust/Python monorepos with no JS workspace
- * config). Fewer than two hits means "not a monorepo" — callers should skip
- * the scope question. Apps sort before shared packages so the picker can
- * show applications first and the cap never drops an app for a library.
+ * pnpm-workspace.yaml, and nx.json, plus a filesystem sweep for nested
+ * manifests (covers Go/Rust/Python monorepos with no JS workspace config).
+ * A subdirectory that is itself a workspace root — e.g. repo-root/clients
+ * holding the actual NX workspace — is descended into with its own config,
+ * never listed as an app. Fewer than two hits means "not a monorepo" —
+ * callers should skip the scope question. Apps sort before shared packages
+ * so the picker shows applications first and the cap never drops an app.
  */
 export async function detectWorkspaceApps(root: string): Promise<WorkspaceApp[]> {
-  const nx = await readNxLayout(root);
   const dirs = new Set<string>();
+  const nestedRoots: string[] = [];
 
-  const patterns = await readWorkspacePatterns(root);
-  if (nx.appsDir) {
-    patterns.push(`${nx.appsDir}/*`);
-  }
-  if (nx.libsDir) {
-    patterns.push(`${nx.libsDir}/*`);
-  }
+  await sweepForManifestDirs(root, "", 1, dirs, nestedRoots);
 
-  for (const pattern of patterns) {
-    for (const dir of await expandPattern(root, pattern)) {
-      dirs.add(dir);
+  // Apply workspace configs of the repo root and every nested workspace
+  // root, prefixing their members with the nested root's path.
+  const workspaceRoots = ["", ...nestedRoots.slice(0, MAX_NESTED_WORKSPACES)];
+  const layouts: { prefix: string; nx: NxLayout }[] = [];
+
+  for (const prefix of workspaceRoots) {
+    const base = prefix ? path.join(root, prefix) : root;
+    const nx = await readNxLayout(base);
+    if (nx.appsDir || nx.libsDir) {
+      layouts.push({ prefix, nx });
+    }
+
+    const patterns = await readWorkspacePatterns(base);
+    if (nx.appsDir) {
+      patterns.push(`${nx.appsDir}/*`);
+    }
+    if (nx.libsDir) {
+      patterns.push(`${nx.libsDir}/*`);
+    }
+
+    for (const pattern of patterns) {
+      for (const dir of await expandPattern(base, pattern)) {
+        dirs.add(prefix ? `${prefix}/${dir}` : dir);
+      }
     }
   }
 
-  for (const dir of await sweepForManifestDirs(root)) {
-    dirs.add(dir);
+  // A workspace root is a container, not an app someone documents.
+  for (const prefix of nestedRoots) {
+    dirs.delete(prefix);
   }
 
   const apps = await Promise.all(
@@ -102,7 +121,7 @@ export async function detectWorkspaceApps(root: string): Promise<WorkspaceApp[]>
       async (dir): Promise<WorkspaceApp> => ({
         dir,
         name: await readAppName(root, dir),
-        kind: await classify(root, dir, nx),
+        kind: await classify(root, dir, layouts),
       }),
     ),
   );
@@ -116,13 +135,13 @@ export async function detectWorkspaceApps(root: string): Promise<WorkspaceApp[]>
 
 /**
  * App vs shared package, strongest signal first: the member's own NX
- * project.json, the nx.json workspace layout, then path-name heuristics.
- * Unknown shapes default to "app" — better to offer it than hide it.
+ * project.json, each workspace root's nx.json layout, then path-name
+ * heuristics. Unknown shapes default to "app" — better to offer than hide.
  */
 async function classify(
   root: string,
   dir: string,
-  nx: NxLayout,
+  layouts: { prefix: string; nx: NxLayout }[],
 ): Promise<"app" | "package"> {
   try {
     const parsed = JSON.parse(
@@ -138,11 +157,15 @@ async function classify(
     // No project.json — fall through to layout/path signals.
   }
 
-  if (nx.appsDir && dir.startsWith(`${nx.appsDir}/`)) {
-    return "app";
-  }
-  if (nx.libsDir && dir.startsWith(`${nx.libsDir}/`)) {
-    return "package";
+  for (const { prefix, nx } of layouts) {
+    const appsDir = nx.appsDir && (prefix ? `${prefix}/${nx.appsDir}` : nx.appsDir);
+    const libsDir = nx.libsDir && (prefix ? `${prefix}/${nx.libsDir}` : nx.libsDir);
+    if (appsDir && dir.startsWith(`${appsDir}/`)) {
+      return "app";
+    }
+    if (libsDir && dir.startsWith(`${libsDir}/`)) {
+      return "package";
+    }
   }
 
   const segments = dir.split("/");
@@ -238,25 +261,53 @@ async function expandPattern(root: string, pattern: string): Promise<string[]> {
 }
 
 /**
- * Manifest sweep: walk up to SWEEP_DEPTH levels; a dir that carries its own
- * manifest is recorded and not descended into (apps don't nest apps).
+ * Manifest sweep: walk up to SWEEP_DEPTH levels. A dir that is itself a
+ * workspace root (nested monorepo, e.g. clients/ holding the NX workspace)
+ * is recorded as such and descended into; a dir carrying a plain manifest
+ * is recorded as a member and not descended into (apps don't nest apps).
  */
-async function sweepForManifestDirs(root: string): Promise<string[]> {
-  const found: string[] = [];
-
-  async function visit(relative: string, depth: number): Promise<void> {
-    for (const child of await listSubdirs(path.join(root, relative))) {
-      const dir = relative ? `${relative}/${child}` : child;
-      if (await hasManifest(path.join(root, dir))) {
-        found.push(dir);
-      } else if (depth < SWEEP_DEPTH) {
-        await visit(dir, depth + 1);
+async function sweepForManifestDirs(
+  root: string,
+  relative: string,
+  depth: number,
+  dirs: Set<string>,
+  nestedRoots: string[],
+): Promise<void> {
+  for (const child of await listSubdirs(path.join(root, relative))) {
+    const dir = relative ? `${relative}/${child}` : child;
+    const absolute = path.join(root, dir);
+    if (await isWorkspaceRootDir(absolute)) {
+      nestedRoots.push(dir);
+      if (depth < SWEEP_DEPTH) {
+        await sweepForManifestDirs(root, dir, depth + 1, dirs, nestedRoots);
       }
+    } else if (await hasManifest(absolute)) {
+      dirs.add(dir);
+    } else if (depth < SWEEP_DEPTH) {
+      await sweepForManifestDirs(root, dir, depth + 1, dirs, nestedRoots);
+    }
+  }
+}
+
+/** A dir that hosts a whole workspace: nx/pnpm/lerna/turbo config, or npm workspaces. */
+async function isWorkspaceRootDir(absolute: string): Promise<boolean> {
+  for (const marker of ["nx.json", "pnpm-workspace.yaml", "lerna.json", "turbo.json"]) {
+    try {
+      await fs.access(path.join(absolute, marker));
+      return true;
+    } catch {
+      // Try the next marker.
     }
   }
 
-  await visit("", 1);
-  return found;
+  try {
+    const parsed = JSON.parse(
+      await fs.readFile(path.join(absolute, "package.json"), "utf8"),
+    ) as { workspaces?: unknown };
+    return parsed.workspaces !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 async function listSubdirs(dir: string): Promise<string[]> {

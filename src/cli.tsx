@@ -127,14 +127,15 @@ async function main(): Promise<void> {
         await patchMeta(root, { paused: false });
       }
 
-      // Very first step of a brand-new interactive init: in a monorepo, ask
-      // which app the wiki should document. Never asked again once meta
-      // exists — `update` and hooks must stay prompt-free.
+      // Very first step of an interactive init: in a monorepo, ask which app
+      // the wiki should document. Asked until an answer is recorded in meta
+      // ("" = whole repo), then never again — `update` and hooks stay
+      // prompt-free either way.
       const detectedApps =
         command.kind === "init" &&
         command.scope === null &&
         Boolean(process.stdin.isTTY) &&
-        meta === null
+        meta?.scope === undefined
           ? await detectWorkspaceApps(root)
           : [];
       const scopeApps: WorkspaceApp[] =

@@ -2,6 +2,15 @@
 
 All notable changes to `@julianoczkowski/agentwiki` are documented here.
 
+## 1.1.1 — 2026-07-16
+
+### Nested workspace roots (fix)
+
+In repos where the actual workspace lives in a subfolder — e.g. a git root whose `clients/` folder holds the real NX workspace (`clients/nx.json`, `clients/apps/*`) — detection used to record `clients` as a single app and never ask the "which app?" question.
+
+- **Nested workspace detection** — a subfolder with `nx.json`, `pnpm-workspace.yaml`, `lerna.json`, `turbo.json`, or an npm `workspaces` field is now treated as a workspace root: descended into with its own config (NX layout, globs) applied, and never offered as an app itself. Sweep depth raised to 4 levels (`clients/apps/<name>` and grouped NX apps).
+- **The question self-heals** — "whole repository" is now recorded explicitly (`scope: ""`), and an interactive `init` asks the app question whenever no answer was ever recorded — so wikis initialized by older versions in a monorepo get the picker on their next `init` instead of staying silently unscoped.
+
 ## 1.1.0 — 2026-07-16
 
 ### Everything anchors at the repo root

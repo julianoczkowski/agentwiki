@@ -167,11 +167,9 @@ function ScopePicker({
             return;
           }
           const app = index > 0 ? listed[index - 1] : null;
-          if (app) {
-            void patchMeta(root, { scope: app.dir }).then(onDone);
-          } else {
-            onDone();
-          }
+          // "" records "whole repository" as an explicit answer so the
+          // question is never asked again for this project.
+          void patchMeta(root, { scope: app ? app.dir : "" }).then(onDone);
         }}
       />
     </Section>
